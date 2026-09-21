@@ -1,0 +1,23 @@
+.grid2 { display: grid; grid-template-columns: minmax(320px, 400px) 1fr; gap: 22px; align-items: start; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+.stack { display: grid; gap: 14px; min-width: 0; }
+.cam-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.cam-row button { flex: 1 1 30%; margin: 0; padding: 10px 6px; white-space: nowrap; }
+.hero { width: 100%; margin: 0; padding: 22px 18px; font: 700 26px/1 var(--display); letter-spacing: .12em; background: linear-gradient(180deg, #ffe14a, var(--hazard)); color: #000; border: 0; box-shadow: 0 0 0 1px rgba(255,212,0,.35), 0 10px 30px -12px rgba(255,212,0,.6); position: relative; overflow: hidden; }
+.hero::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, transparent 0 12px, rgba(0,0,0,.05) 12px 24px); pointer-events: none; }
+.hero:active { transform: translateY(1px); }
+.hero-meta { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; color: var(--dim); font-size: 13px; }
+.hero-meta b { font: 700 22px/1 var(--display); color: #eef0f2; margin-left: 4px; }
+.action { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.action:first-of-type { border-top: 0; padding-top: 0; }
+.action .label { font: 600 13px/1.2 var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.action .label small { display: block; font: 400 12px/1.3 var(--pico-font-family); text-transform: none; letter-spacing: 0; color: var(--dim); margin-top: 3px; }
+.action .fields { display: flex; gap: 6px; align-items: center; }
+.action .fields button { margin: 0; height: 36px; padding: 0 14px; }
+.field { display: flex; align-items: center; margin: 0; background: #0b0d10; border: 1px solid var(--line-2); border-radius: 4px; height: 36px; }
+.field span { padding: 0 8px 0 10px; height: 34px; color: #eef0f2; font: 700 14px/34px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.field input { height: 34px; line-height: 34px; padding: 0 !important; margin: 0; background: transparent; border: 0; box-shadow: none; color: #eef0f2; font: 600 14px/34px var(--display); text-align: center; }
+.field input:focus { color: var(--hazard); box-shadow: none; }
+.btn-row { display: flex; gap: 8px; min-width: 0; }
+.btn-row + .btn-row { margin-top: 8px; }
+.btn-row button { flex: 1; margin: 0; }

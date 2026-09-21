@@ -1,0 +1,28 @@
+# stream-racer-api
+
+BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `./install.sh`; the game must be closed to swap the DLL (Windows locks it).
+
+- `src/Game.cs` is the only place obfuscated game member names live; an update that renames one makes that route return 501.
+- `ui/` is served straight from embedded resources: React/zustand/htm via esm.sh import map, Pico CSS. No bundler. One `.js` + `.css` per page/component, shared tokens in `ui/shared.css`.
+- Page settings persist server-side (`/settings`), not localStorage; only the API token is per-browser.
+
+## Third-party bots (e.g. voisona-bot's TTS-chan)
+- One roster on the Bots page: Twitch bots and custom bots are the same list. Per card: ★ auto-join, ↯ auto-boost, Join now, ✕.
+- `settings.botOptions[login].autoBoost=false` = the mod never spends that car's boosts; the bot does it via `POST /boost/:login/use`
+  using `GET /track/zones` (straights: <12° turn, flat, ≥55 long, clamped to the finish). `PUT /settings` merges, so a bot can send only its keys.
+- `lobby` SSE fires when the lobby is joinable (after the scene reload), not at NewGame. `race_start` may precede the circuit: retry `/track/zones`.
+- `Game.Ended` (race over → next lobby): screen = `postgame`, `/join` and `/race/start` refuse (old cars still in scene; joining would duplicate the field). Use `POST /race/next`.
+- `settings.webhooks` [{event,url,method,header,body,enabled}] fire from `Plugin.Emit` (src/Webhooks.cs). Auto camera is OFF by default; `AUTO=1 sr-cycle.sh` turns it on for tests.
+- Reference client: `D:\streaming\voisona-bot\src\streamracer\index.js` (registers, auto-joins, qwen picks zones, boosts, race_end chat line). `node src/streamracer/index.js` runs it standalone.
+- TTS-chan: `!race auto` = join & race every lobby (default on). `!race host on` (env `STREAM_RACER_HOST=1`): home → `/lobby?map=<random official>` → `lobby` event → chat/voice → `/race/start` (= press START: the game's own countdown is the join window; `STREAM_RACER_LOBBY_WAIT` adds seconds before pressing it) → commentary on boom/finisher/race_end → `/race/next` 20 s after `race_end`. Snapshot now carries `map {id,name}`.
+- UI routes are real paths (`/controls`, `/camera`, `/bots`, `/settings`, `/api`): `Plugin.Handle` serves index.html for those when the request `Accept`s text/html, JSON otherwise (so `GET /settings` still works for fetch/curl). Old `#/page` links are rewritten client-side.
+- Screenshots of the UI: `node "%TEMP%/sr-cdp.mjs" <url> <js-expr> <png>` drives chrome-headless-shell over CDP. Do NOT use `--screenshot --timeout`: that flag freezes page JS before fetches apply and shows default settings.
+- Custom bots with no color get `Game.AutoColor(login)` (palette by login hash).
+- "Add all of chat" (Controls → Race) needs Twitch's chatters list (`moderator:read:chatters`), which the game token lacks: the page POSTs to the bot (`ui.chatJoinUrl`, default `http://127.0.0.1:8788/race/join-chat` on voisona-bot's speak server, CORS *). Chat: `!race chat`. Lobby padding when TTS-chan hosts: `!race pad off|fill [n]|all` (roster bots added right before she presses START).
+- UI people pieces live in `ui/components/roster.js` (TwitchLookup, Card, Grid, useTwitchUsers) and are shared by Bots and the Settings auto-join list.
+- Version: `Plugin.Version` (also the BepInPlugin version) → `GET /version` {api, game, unity, bepinex}; `!race version` in chat. Semver from conventional commits via `scripts/commit-msg` (`cp scripts/commit-msg .git/hooks/` once per clone): `feat:` minor, `fix:`/other patch, `!`/BREAKING CHANGE major; `SKIP_BUMP=1` skips. The build stamps `git rev-parse --short HEAD` into the assembly (`Plugin.Commit`).
+- Chat `!race respawn` (settings.respawnCommand / respawnCommandEnabled, Settings → Chat commands) respawns the typer's own car during a race (Game.OnChatMessage). `!race help` in voisona-bot reads these settings.
+- In-game credits (Settings → Credits) get an "API" block from `src/Credits.cs`: version (green/red/white by `Updates.UpToDate`), commit (`Plugin.Commit`, stamped from `git rev-parse` at build, "dev" outside git), developer, clickable Twitch link. Update check: `api.UpdateUrl` config → JSON `{version, url}`, fetched hourly (`src/Updates.cs`); `GET /version` and the page header show it.
+- Dev routes (undocumented): `GET /find?q=<path substring>` (GameObjects + components + TMP text), `POST /find/click?path=`, `POST /find/panel?name=Home|Play|Settings`, `POST /find/scroll?path=&pos=`.
+- UI rule: never define a component inside another component's render (e.g. `const Num = () => …` inside a page). Pages re-render 60×/s on `pos` during a race, and a new component identity remounts the `<input>`, wiping what's being typed. `Num`/`Sel` live at module level in settings.js and controls.js.
+- Mini map: on by default; one ratio setting (`minimap.aspect`) shapes both the in-game map and `/minimap`; `h` is unused. Only the Settings switch and `POST /minimap` toggle it.

@@ -1,0 +1,52 @@
+/* Shared tokens + Pico overrides. Page/component styles live next to their module. */
+:root {
+  --pico-font-family: "Barlow", "Segoe UI", sans-serif;
+  --pico-font-size: 15px;
+  --pico-background-color: #0a0b0d;
+  --pico-card-background-color: #111316;
+  --pico-card-border-color: #23272d;
+  --pico-muted-color: #7d8590;
+  --pico-primary: #ffd400;
+  --pico-primary-hover: #ffe14a;
+  --pico-primary-inverse: #000;
+  --pico-primary-focus: rgba(255,212,0,.25);
+  --pico-border-radius: 4px;
+  --pico-form-element-background-color: #0b0d10;
+  --pico-form-element-border-color: #2f343b;
+  --pico-form-element-focus-color: #ffd400;
+  --pico-switch-checked-background-color: #ffd400;
+
+  --display: "Chakra Petch", Impact, sans-serif;
+  --line: #23272d; --line-2: #2f343b; --dim: #7d8590; --mute: #4c535c;
+  --hazard: #ffd400; --boom: #ff3b30; --boost: #35e0ff; --slow: #b07cff; --live: #3ddc84;
+}
+body {
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(255,212,0,.06), transparent 60%),
+    repeating-linear-gradient(135deg, transparent 0 22px, rgba(255,255,255,.012) 22px 23px),
+    var(--pico-background-color);
+}
+h1, h2, h3, .display, button, [role=button] { font-family: var(--display); letter-spacing: .08em; text-transform: uppercase; }
+article { padding: 16px; margin: 0; }
+article > header { margin: -16px -16px 12px; padding: 10px 16px; font: 700 12px/1 var(--display); letter-spacing: .22em; text-transform: uppercase; color: var(--dim); background: transparent; border-bottom: 1px solid var(--line); }
+button, [role=button] { font-size: 13px; padding: 10px 14px; }
+button.secondary { background: #171a1e; border-color: var(--line-2); color: #eef0f2; }
+button.secondary:hover { background: #1f232a; border-color: #eef0f2; color: #eef0f2; }
+button.secondary.outline { background: transparent; color: var(--dim); }
+button.secondary.outline:hover { color: #eef0f2; }
+button.boom  { --pico-background-color: transparent; --pico-border-color: rgba(255,59,48,.5); --pico-color: #eef0f2; }
+button.boom:hover  { --pico-background-color: var(--boom);  --pico-border-color: var(--boom);  --pico-color: #000; }
+button.boost { --pico-background-color: transparent; --pico-border-color: rgba(53,224,255,.5); --pico-color: #eef0f2; }
+button.boost:hover { --pico-background-color: var(--boost); --pico-border-color: var(--boost); --pico-color: #000; }
+button.slow  { --pico-background-color: transparent; --pico-border-color: rgba(176,124,255,.5); --pico-color: #eef0f2; }
+button.slow:hover  { --pico-background-color: var(--slow);  --pico-border-color: var(--slow);  --pico-color: #000; }
+input, select, textarea { margin: 0; }
+kbd { font: 600 11px/1 var(--display); letter-spacing: .1em; padding: 3px 7px; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 3px; background: transparent; color: inherit; }
+.tag { display: inline-block; font: 600 11px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; padding: 6px 10px; border: 1px solid var(--line-2); color: var(--dim); border-radius: 3px; }
+.tag.live { color: #000; background: var(--live); border-color: var(--live); }
+.tag.live::before { content: "●"; margin-right: 6px; animation: blink 1.2s infinite; }
+.tag.lobby { color: var(--hazard); border-color: var(--hazard); }
+@keyframes blink { 50% { opacity: .25; } }
+#toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; transition: .18s; background: #000; border: 1px solid var(--hazard); color: #eef0f2; padding: 10px 16px; border-radius: 4px; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; pointer-events: none; z-index: 9; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+#toast.bad { border-color: var(--boom); color: var(--boom); }

@@ -1,0 +1,47 @@
+.settings { display: grid; grid-template-columns: 1fr; gap: 14px; max-width: 760px; }
+.you-row { display: flex; gap: 12px; align-items: end; }
+.you-row label { margin: 0; font-size: 13px; color: var(--dim); }
+.you-row input[type=color] { display: block; margin: 3px 0 0; width: 64px; height: 38px; padding: 2px 4px; }
+.you-row button { margin: 0; height: 38px; }
+.you-row .colorrow { display: flex; gap: 4px; margin-top: 3px; }
+.you-row .colorrow button { margin: 0; height: 38px; padding: 0 10px; font-size: 11px; }
+.you-row .colorrow button.on { background: var(--hazard); color: #000; border-color: var(--hazard); }
+.you-row .colorrow input[type=color] { margin: 0; width: 46px; height: 38px; padding: 2px 4px; }
+.hint-inline { margin-left: 10px; font: 400 12px var(--pico-font-family); letter-spacing: 0; text-transform: none; color: var(--mute); }
+.switch-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font: 600 14px var(--display); letter-spacing: .04em; }
+.switch-row input { margin: 0; }
+.hint { color: var(--dim); font-size: 14px; margin: 0 0 12px; }
+.settings textarea { font: 500 14px/1.6 var(--display); letter-spacing: 0; text-transform: none; resize: vertical; }
+.btn-row { display: flex; gap: 8px; margin-top: 12px; }
+.btn-row button { margin: 0; }
+.ovgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; align-items: end; }
+.ovgrid label { margin: 0; font-size: 13px; color: var(--dim); }
+.ovgrid input:not([type=checkbox]), .ovgrid select { margin-top: 3px; height: 36px; padding: 0 10px; font: 600 14px var(--display); letter-spacing: 0; text-transform: none; }
+.ovgrid input[type=checkbox] { margin: 0; }
+.ovgrid input[type=color] { padding: 2px 4px; }
+.ovgrid .switch-row { grid-column: 1 / -1; margin: 10px 0 0; }
+.ovgrid .switch-row + .switch-row { margin-top: 0; }
+.ovgrid button { margin: 0; grid-column: 1 / -1; }
+.portrow { display: flex; gap: 6px; }
+.portrow input { flex: 1; }
+.portrow button { margin: 3px 0 0; height: 36px; padding: 0 14px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; margin: 0 0 14px; }
+.kv dt { color: var(--dim); font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; }
+.kv dd { margin: 0; }
+
+.hooks { display: grid; gap: 8px; }
+.hook { display: grid; grid-template-columns: auto 130px 80px 1.4fr 1fr 1.4fr auto; gap: 6px; align-items: center; }
+.hook input:not([type=checkbox]), .hook select { height: 34px; margin: 0; padding: 0 8px; font: 500 13px var(--display); letter-spacing: 0; text-transform: none; }
+.hook input[type=checkbox] { margin: 0; }
+.hook .x { width: 34px; height: 34px; margin: 0; padding: 0; background: transparent; border: 1px solid var(--line-2); color: var(--mute); }
+.hook .x:hover { color: #000; background: var(--boom); border-color: var(--boom); }
+.hooks > button { margin: 0; width: max-content; }
+@media (max-width: 1000px) { .hook { grid-template-columns: auto 1fr 1fr auto; } }
+
+.mmlink { display: grid; grid-template-columns: 120px auto auto 1fr auto; gap: 10px; align-items: center; }
+.mmlink label { margin: 0; font-size: 12px; color: var(--dim); }
+.mmlink select, .mmlink input[readonly] { height: 34px; margin: 0; padding: 0 8px; font: 500 13px var(--display); letter-spacing: 0; text-transform: none; }
+.mmlink label:first-child select { margin-top: 3px; }
+.mmlink input[readonly] { color: var(--hazard); }
+.mmlink button { margin: 0; height: 34px; white-space: nowrap; }
+@media (max-width: 900px) { .mmlink { grid-template-columns: 1fr 1fr; } }

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>StreamRacerApi</AssemblyName>
+    <RootNamespace>StreamRacerApi</RootNamespace>
+    <Nullable>disable</Nullable>
+    <OutputPath>build</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+    <EmbeddedResource Include="ui/**/*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="lib/*.dll" Private="false" />
+  </ItemGroup>
+  <!-- commit stamp: read once at build, "dev" outside git -->
+  <Target Name="GitStamp" BeforeTargets="CoreCompile">
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" ContinueOnError="true" StandardOutputImportance="low" StandardErrorImportance="low" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommit" />
+      <Output TaskParameter="ExitCode" PropertyName="GitExit" />
+    </Exec>
+    <PropertyGroup><GitCommit Condition="'$(GitExit)' != '0' or '$(GitCommit)' == ''">dev</GitCommit></PropertyGroup>
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyInformationalVersionAttribute"><_Parameter1>$(GitCommit)</_Parameter1></AssemblyAttribute>
+    </ItemGroup>
+  </Target>
+</Project>
