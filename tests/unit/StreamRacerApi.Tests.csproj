@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Unit tests for the engine-free logic in src/Pure.cs. Run: dotnet test tests/unit
+       Layout mirrors src/: tests/unit/Pure/<Concern>Tests.cs, one file per section of Pure.cs. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- compile the pure file straight in: no game/BepInEx assemblies needed -->
+    <Compile Include="..\..\src\Pure.cs" Link="src\Pure.cs" />
+    <Compile Include="**\*.cs" Exclude="bin\**;obj\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Vector3/Mathf are managed math inside CoreModule; nothing native gets touched -->
+    <Reference Include="UnityEngine.CoreModule"><HintPath>..\..\lib\UnityEngine.CoreModule.dll</HintPath></Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+</Project>

@@ -17,7 +17,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.1.0"; // semver, bumped by scripts/commit-msg from the commit message
+    public const string Version = "1.26.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit => typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] a && a.Length > 0 ? a[0].InformationalVersion : "dev";
     public static ConfigEntry<string> UpdateUrl;
     public static ConfigEntry<int> Port;

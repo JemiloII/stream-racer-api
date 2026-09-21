@@ -166,31 +166,11 @@ static class Game
         if (finish > 0) length = Mathf.Min(length, finish); // the route keeps going past the finish line; nothing to boost for there
         object key = length + ":" + (circuit.IPOOGHHOEGD?.Length ?? 0);
         if (_zones != null && key.Equals(_zonesKey)) return _zones;
-        var zones = new List<float[]>();
-        if (length > 0)
-        {
-            const float step = 4f, look = 40f, maxTurn = 12f, maxSlope = 0.12f, minLen = 55f;
-            float zoneStart = -1f;
-            for (float d = 0; d + look < length; d += step)
-            {
-                var a = circuit.GetRoutePoint(d); var b = circuit.GetRoutePoint(d + look);
-                var da = a.AHLOFCFINIO; da.y = 0; var db = b.AHLOFCFINIO; db.y = 0;
-                float turn = Vector3.Angle(da, db);
-                float slope = Mathf.Abs(b.PFHEOLIHHHD.y - a.PFHEOLIHHHD.y) / look;
-                bool straight = turn < maxTurn && slope < maxSlope;
-                if (straight && zoneStart < 0) zoneStart = d;
-                if (!straight && zoneStart >= 0) { if (d - zoneStart >= minLen) zones.Add(new[] { zoneStart, d + look * 0.5f }); zoneStart = -1f; }
-            }
-            if (zoneStart >= 0 && length - zoneStart >= minLen) zones.Add(new[] { zoneStart, length });
-        }
+        var zones = Pure.Zones(d => { var rp = circuit.GetRoutePoint(d); return (rp.PFHEOLIHHHD, rp.AHLOFCFINIO); }, length);
         _zones = zones; _zonesKey = key;
         return zones;
     }
-    public static bool InBoostZone(float progress)
-    {
-        foreach (var z in BoostZones()) if (progress >= z[0] && progress <= z[1] - 20f) return true; // not right at the end of a straight
-        return false;
-    }
+    public static bool InBoostZone(float progress) => Pure.InZone(BoostZones(), progress);
     public static object ZonesDto()
     {
         var c = WaypointController.NEPFAEJAMGI?.GetCircuit();
@@ -503,12 +483,7 @@ static class Game
         target.enabled = true;
     }
 
-    static readonly string[] Palette = { "#ff3b30", "#ffd400", "#35e0ff", "#b07cff", "#3ddc84", "#ff8c42", "#ff5fa2", "#7ae7ff", "#c8ff4d", "#ff7a7a" };
-    public static Color AutoColor(string login)
-    {
-        int h = 0; foreach (char c in login ?? "") h = h * 31 + c;
-        ColorUtility.TryParseHtmlString(Palette[System.Math.Abs(h) % Palette.Length], out var c2); return c2;
-    }
+    public static Color AutoColor(string login) { ColorUtility.TryParseHtmlString(Pure.AutoColorHex(login), out var c); return c; }
     public static bool Join(string id, string login, string displayName, string colorHex, bool sub, string image = null)
     {
         if (!string.IsNullOrWhiteSpace(image)) Images[login] = image; else Images.Remove(login);
@@ -717,17 +692,15 @@ static class Game
     public static void OnChatMessage(string login, string message)
     {
         if (string.IsNullOrEmpty(login) || string.IsNullOrEmpty(message)) return;
-        string rc = (Settings.Current.respawnCommand ?? "").Trim();
-        if (Settings.Current.respawnCommandEnabled && rc.Length > 0 && message.Trim().Equals(rc, System.StringComparison.OrdinalIgnoreCase))
+        if (Settings.Current.respawnCommandEnabled && Pure.CommandArg(message, Settings.Current.respawnCommand) == "")
         {
             var mine = Find(login); if (mine != null && Respawn(mine)) Plugin.Emit("respawn", EventDto(mine));
             return;
         }
         if (!Settings.Current.colorCommandEnabled) return;
-        string cmd = (Settings.Current.colorCommand ?? "!color").Trim();
-        if (cmd.Length == 0 || !message.StartsWith(cmd, System.StringComparison.OrdinalIgnoreCase)) return;
-        string arg = message.Substring(cmd.Length).Trim();
-        if (arg.Length == 0) return;
+        string cmd = (Settings.Current.colorCommand ?? "!race color").Trim();
+        string arg = Pure.CommandArg(message, cmd);
+        if (string.IsNullOrEmpty(arg)) return;
         var tier = Settings.Current.perks.colorCommand;
         if (tier == "follower" && FollowerChecksAvailable && !FollowerKnown(login) && Find(login) == null)
         {   // unknown follower status: look it up, then retry once
@@ -831,7 +804,8 @@ static class Game
         return true;
     }
 
-    public static void EndRace() { if (Running) Ended = true; GameController.NEPFAEJAMGI.ForceEndGame(); }
+    // EndCurrentGame is the path the game takes when the clock runs out (stops cars, tears down); ForceEndGame skips it and our race_end patch.
+    public static void EndRace() { if (!Running) return; Ended = true; GameController.NEPFAEJAMGI.EndCurrentGame(); }
     // Next map from the queue set by /lobby (or the Play tab). Works from the post-game screen or anywhere idle.
     public static bool NextRace()
     {

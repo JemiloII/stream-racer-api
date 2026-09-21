@@ -1,0 +1,22 @@
+{
+  "name": "stream-racer-api",
+  "private": true,
+  "type": "module",
+  "description": "Tests for the Stream Racer API mod: xunit for the pure C# logic, Vitest against the running game, Playwright for the control page.",
+  "scripts": {
+    "test": "pnpm run test:unit && pnpm run test:api",
+    "test:unit": "dotnet test tests/unit --nologo -v q",
+    "test:api": "vitest run --dir tests/api",
+    "test:race": "vitest run --dir tests/race",
+    "test:ui": "playwright test",
+    "test:all": "pnpm run test:unit && pnpm run test:api && pnpm run test:ui && pnpm run test:race",
+    "typecheck": "tsc --noEmit",
+    "hooks": "cp scripts/post-commit .git/hooks/post-commit && chmod +x .git/hooks/post-commit && echo hooks installed"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "24.13.6",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  }
+}

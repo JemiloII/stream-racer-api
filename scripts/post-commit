@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Semver bump from the commit message (conventional commits), applied to src/Plugin.cs and staged into this commit:
+# Semver bump from the commit message (conventional commits), folded into the commit that was just made:
 #   feat: …            -> minor        fix: / chore: / anything else -> patch
 #   feat!: … / BREAKING CHANGE in the body -> major
-# Install once per clone: cp scripts/commit-msg .git/hooks/commit-msg    Skip: SKIP_BUMP=1 git commit …
+# Runs post-commit (the only hook that both knows the message and can still change the tree, via --amend --no-verify).
+# Install once per clone: cp scripts/post-commit .git/hooks/post-commit    Skip: SKIP_BUMP=1 git commit …
 [ -n "$SKIP_BUMP" ] && exit 0
+[ -n "$SR_BUMPING" ] && exit 0
 cd "$(git rev-parse --show-toplevel)" || exit 0
-MSG="$1" python - <<'PY' && git add src/Plugin.cs
+MSG="$(git log -1 --pretty=%B)" python - <<'PY' || exit 0
 import os, re
-msg = open(os.environ["MSG"], encoding="utf-8", errors="ignore").read()
-head = msg.strip().splitlines()[0] if msg.strip() else ""
+msg = os.environ["MSG"]; head = msg.strip().splitlines()[0] if msg.strip() else ""
 kind = "major" if re.match(r"^\w+(\(.+\))?!:", head) or "BREAKING CHANGE" in msg else "minor" if head.lower().startswith("feat") else "patch"
 p = "src/Plugin.cs"; s = open(p, encoding="utf-8").read()
 m = re.search(r'Version = "(\d+)\.(\d+)\.(\d+)"', s); a, b, c = map(int, m.groups())
 a, b, c = (a + 1, 0, 0) if kind == "major" else (a, b + 1, 0) if kind == "minor" else (a, b, c + 1)
 open(p, "w", encoding="utf-8").write(s.replace(m.group(0), f'Version = "{a}.{b}.{c}"', 1)); print(f"version -> {a}.{b}.{c} ({kind})")
 PY
+git add src/Plugin.cs && SR_BUMPING=1 git commit -q --amend --no-edit --no-verify

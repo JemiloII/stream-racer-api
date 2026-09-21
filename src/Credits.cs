@@ -28,6 +28,23 @@ public static class Credits
         _body = UnityEngine.Object.Instantiate(descSrc.gameObject, t).GetComponent<TextMeshProUGUI>();
         _body.gameObject.name = "ApiDescription"; _body.richText = true; _body.raycastTarget = true; _body.text = Body(); _body.transform.SetSiblingIndex(1);
         _body.gameObject.AddComponent<LinkOpener>();
+        // the game's first title is taller (top padding for the list); we're first now, so take that height and give
+        // the old first title the regular one
+        var first = t.Find("MusicTitle") as RectTransform; var tr = _title.rectTransform;
+        if (first != null) { var tall = first.sizeDelta; first.sizeDelta = ((RectTransform)titleSrc).sizeDelta; tr.sizeDelta = tall; }
+        Plugin.Instance.StartCoroutine(Relayout(t));
+    }
+    // the list grew: rebuild the layout (size fitter) and put the scroll back at the top
+    static System.Collections.IEnumerator Relayout(Transform list)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            yield return null;
+            // the cloned box is a fixed height; our text is taller, so grow it or the link's bottom half isn't hoverable
+            if (_body != null) { _body.ForceMeshUpdate(); var sd = _body.rectTransform.sizeDelta; sd.y = Mathf.Max(sd.y, _body.preferredHeight + 6f); _body.rectTransform.sizeDelta = sd; }
+            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(list as RectTransform);
+            var sr = list.GetComponentInParent<UnityEngine.UI.ScrollRect>(); if (sr != null) sr.verticalNormalizedPosition = 1f;
+        }
     }
 
     static bool HasCommit => !string.IsNullOrEmpty(Plugin.Commit) && Plugin.Commit != "dev";
@@ -40,26 +57,30 @@ public static class Credits
         return $"Version - <color={vc}>{Plugin.Version}</color>{upd}{commit}\nDeveloper - Shibiko\n<link=\"{Url}\"><color={lc}><u>{Url}</u></color></link>";
     }
 
-    // Hover/press colors for the <link>, click opens it. The game hides the cursor in its menus, so while the mouse is
-    // over the link we show it ourselves (LateUpdate, so we win over the game's own cursor handling that frame).
-    public class LinkOpener : MonoBehaviour, IPointerClickHandler, IPointerDownHandler, IPointerUpHandler
+    // Hover/press colors for the <link>, click opens it. Pointer enter/exit tell us when the mouse is over the text
+    // (and which camera the canvas uses); inside that we hit-test the link every frame. The game hides the cursor in
+    // its menus, so while over the link we show it ourselves (LateUpdate, so we win over the game's handling).
+    public class LinkOpener : MonoBehaviour, IPointerClickHandler, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler
     {
-        TMP_Text _tmp; bool _press;
+        TMP_Text _tmp; bool _press, _inside; Camera _cam;
         public bool Hover { get; private set; }
         void Awake() => _tmp = GetComponent<TMP_Text>();
-        bool OverLink() => _tmp != null && _tmp.isActiveAndEnabled && TMP_TextUtilities.FindIntersectingLink(_tmp, Input.mousePosition, null) >= 0;
+        Camera Cam() { if (_cam != null) return _cam; var c = GetComponentInParent<Canvas>(); return c != null && c.renderMode != RenderMode.ScreenSpaceOverlay ? c.worldCamera : null; }
+        bool OverLink(Vector2 pos) => _tmp != null && _tmp.isActiveAndEnabled && TMP_TextUtilities.FindIntersectingLink(_tmp, pos, Cam()) >= 0;
         void LateUpdate()
         {
-            bool over = OverLink();
+            bool over = _inside && OverLink(Input.mousePosition);
             if (over != Hover) { Hover = over; if (!over) _press = false; _tmp.text = Body(Hover, _press); }
             if (over) { Cursor.visible = true; Cursor.lockState = CursorLockMode.None; }
         }
-        public void OnPointerDown(PointerEventData e) { if (OverLink()) { _press = true; _tmp.text = Body(true, true); } }
+        public void OnPointerEnter(PointerEventData e) { _inside = true; _cam = e.enterEventCamera ?? _cam; }
+        public void OnPointerExit(PointerEventData e) { _inside = false; }
+        public void OnPointerDown(PointerEventData e) { _cam = e.pressEventCamera ?? _cam; if (OverLink(e.position)) { _press = true; _tmp.text = Body(true, true); } }
         public void OnPointerUp(PointerEventData e) { _press = false; _tmp.text = Body(Hover, false); }
         public void OnPointerClick(PointerEventData e)
         {
             int i = TMP_TextUtilities.FindIntersectingLink(_tmp, e.position, e.pressEventCamera);
-            if (i >= 0) Application.OpenURL(_tmp.textInfo.linkInfo[i].GetLinkID());
+            if (i >= 0) { Plugin.Log.LogInfo("credits link -> " + _tmp.textInfo.linkInfo[i].GetLinkID()); Application.OpenURL(_tmp.textInfo.linkInfo[i].GetLinkID()); }
         }
     }
 }

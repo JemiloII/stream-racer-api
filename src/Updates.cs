@@ -10,7 +10,7 @@ namespace StreamRacerApi;
 public static class Updates
 {
     public static string Latest, Url; static DateTime _checked = DateTime.MinValue; static int _busy;
-    public static bool? UpToDate => Latest == null ? null : (bool?)(CompareVersions(Plugin.Version, Latest) >= 0);
+    public static bool? UpToDate => Latest == null ? null : (bool?)(Pure.CompareVersions(Plugin.Version, Latest) >= 0);
     public static void Kick()
     {
         string u = Plugin.UpdateUrl?.Value; if (string.IsNullOrWhiteSpace(u) || DateTime.UtcNow - _checked < TimeSpan.FromHours(1) || Interlocked.Exchange(ref _busy, 1) == 1) return;
@@ -26,15 +26,5 @@ public static class Updates
             catch (Exception e) { Plugin.Log.LogWarning("update check: " + e.Message); _checked = DateTime.UtcNow; }
             finally { _busy = 0; }
         });
-    }
-    static int CompareVersions(string a, string b)
-    {
-        var pa = (a ?? "0").Split('.'); var pb = (b ?? "0").Split('.');
-        for (int i = 0; i < Math.Max(pa.Length, pb.Length); i++)
-        {
-            int x = i < pa.Length && int.TryParse(pa[i], out var vx) ? vx : 0, y = i < pb.Length && int.TryParse(pb[i], out var vy) ? vy : 0;
-            if (x != y) return x.CompareTo(y);
-        }
-        return 0;
     }
 }

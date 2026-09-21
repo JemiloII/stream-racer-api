@@ -1,3 +1,10 @@
 build/
 obj/
+bin/
 lib/
+.cache/
+dist/
+node_modules/
+test-results/
+playwright-report/
+.idea/

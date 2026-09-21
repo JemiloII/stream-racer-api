@@ -4,12 +4,14 @@ Stream Racer API: a BepInEx plugin that exposes [Stream Racer](https://store.ste
 
 ## Install
 
-**Release zip:** unzip over the game folder (next to `StreamRacer.exe`), launch the game, open `http://localhost:8793`.
+**Release zip:** contains everything, BepInEx 5.4.23.3 (`winhttp.dll`, `doorstop_config.ini`, `BepInEx/core`) plus the plugin at `BepInEx/plugins/StreamRacerApi.dll`. Close the game, unzip over the game folder (next to `StreamRacer.exe`), launch the game, open `http://localhost:8793`. See `INSTALL.txt` inside the zip.
 
 **From source** (Git Bash, .NET 8 SDK):
 
 ```
-./install.sh        # builds, installs BepInEx if missing, copies the plugin
+./install.sh          # builds, installs BepInEx if missing, copies the plugin into the game folder
+scripts/release.sh    # build a release: dist/stream-racer-api-<version>.zip (BepInEx + plugin + INSTALL.txt)
+dotnet test tests/unit
 ```
 
 The control page is plain ES modules embedded in the DLL, no bundler. Edit `ui/`, rebuild, restart the game.
@@ -88,6 +90,7 @@ Works as an OBS custom browser dock. Pages and the overlay reconnect on their ow
 | `POST /camera/focus/:x`, `/leader`, `/free` | the game's own follow / free cam |
 | `POST /minimap?on=` | toggle the in-game picture-in-picture course map; placement/look in `settings.minimap` |
 | `GET /minimap` | browser-source mini map page (route + car dots), same look settings |
+| `POST /lobby/exit` | leave the lobby (EXIT button), back to the home screen |
 | `GET /track/zones` | straights worth boosting on for the current map (route distances, match `progress`) |
 | `POST /boost/:x/use` | spend one of a car's own boosts (third-party bot control) |
 | `GET /track` | route outline `{points:[[x,z]…], bounds}`; snapshots carry each car's `x`,`z` |
@@ -109,6 +112,21 @@ es.addEventListener("finisher",  e => tts(JSON.parse(e.data).displayName + " fin
 await fetch("http://127.0.0.1:8793/boom/all?except=me", { method: "POST", headers: H });
 ```
 
+## Tests
+
+Four suites, `pnpm` only (`pnpm install` once). `pnpm test` = unit + api; `pnpm test:all` = unit + api + ui + race.
+
+| command | what | needs |
+|---|---|---|
+| `pnpm test:unit` | xunit over the pure C# logic (`src/Pure.cs`) | .NET 8 SDK; no game |
+| `pnpm test:api` | Vitest + TypeScript, one file per route family in `tests/api/`: version, screen, race snapshot, settings (PUT merges, restored), config (unchanged values only: never the port or token), maps, twitch users, track, camera state, minimap (toggled twice), static pages, events, auth, webhooks (a local HTTP server on a random port receives the `settings` event). Read-only: everything it touches is put back. | the game running on any screen; skips with a printed reason when it is not |
+| `pnpm test:ui` | Playwright over the control page (below) | the game running + cached Chromium |
+| `pnpm test:race` | **takes over the game for ~2 minutes**: `tests/race/` runs `lobby` → `racing` → `camera` → `end` in that order (`/lobby`, `/join`, `/race/start?now=1`, 60 Hz `pos` frames, zones, boosts, booms, respawn, speed, `/finish`, every camera shot, `/race/end`, postgame lock-out, `/race/next`). Auto-join is switched off for the run and restored afterwards. | the game **idle on the home screen** with nobody watching; refuses otherwise. It ends in a fresh empty lobby: back out to the menu before running it again |
+
+`SR_API` overrides the base URL (default `http://127.0.0.1:8793`), `SR_TOKEN` supplies the bearer when `api.Token` is set. `pnpm typecheck` runs `tsc --noEmit` over every TypeScript test. Shared helpers live in `tests/support/` (`apiClient`, `gameScreen`, `eventStream`, `sourceVersion`, `settingsStore`); `tests/api/version.test.ts` fails when the installed DLL is not the build from `src/Plugin.cs`.
+
+UI tests: `pnpm test:ui` (Playwright + TypeScript; `tests/ui/` mirrors `ui/`: `pages/`, `components/`, `app`, `overlay`, `minimap`, shared fixtures in `tests/ui/fixtures/`). They open every control page plus `/overlay` and `/minimap` in headless Chromium against the running game and compare the DOM with `/settings`, `/version` and `/race`, failing on any console error or uncaught exception. Read-only: nothing that changes game state is clicked. If the game is down every test skips with a printed reason. `SR_API` overrides the base URL (default `http://127.0.0.1:8793`); screenshots land in `test-results/` on failure only. `pnpm typecheck` type-checks the specs.
+
 ## Layout
 
 ```
@@ -117,5 +135,10 @@ src/Routes.cs    URL → action
 src/Game.cs      the only file that touches obfuscated game members
 src/Patches.cs   Harmony: race lifecycle events, free-cam keys, slow re-apply
 src/Settings.cs  persisted page settings + auto-join
+src/Pure.cs      engine-free logic (boost zones, versions, mini map math, colors, chat parsing); what the unit tests cover
 ui/              control page (React + zustand + htm from esm.sh, Pico CSS); one .js + .css per page/component
+tests/unit/      xunit tests, mirroring src/: tests/unit/Pure/<Concern>Tests.cs, one file per section of Pure.cs
+tests/ui/        Playwright UI tests mirroring ui/ (pages/, components/, app, overlay, minimap); fixtures/ = server truth + console guard
+tests/*.mjs      end-to-end tests against a running game
+scripts/         release.sh (release zip), bepinex.sh (BepInEx version/URL + download cache), post-commit (semver bump hook, amends the commit)
 ```

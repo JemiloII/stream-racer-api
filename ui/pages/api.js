@@ -23,6 +23,7 @@ const GROUPS = [
     { m: "POST", p: "/join/me", s: "Add the streamer's own car", d: "Same as the lobby's JOIN GAME button. Color defaults to Settings → My car color.", params: [P("color", "hex", "car / name color", { in: "query", example: "#ff8a00" })], res: { ok: true, affected: 1 }, err: "409 no lobby, not logged in, already joined" },
     { m: "POST", p: "/autojoin/join", s: "Join the saved auto-join list now", params: [], res: { ok: true, affected: 3 }, err: "409 race running" },
     { m: "POST", p: "/kick/:x", s: "Remove a racer from the lobby", params: [TARGET], res: { ok: true, affected: 1 }, err: "404 no vehicle · 409 race running" },
+    { m: "POST", p: "/lobby/exit", s: "Leave the lobby (the EXIT button)", d: "Back to the home screen; the cars in the lobby are dropped.", params: [], res: { ok: true, affected: 1 }, err: "409 not in a lobby" },
     { m: "POST", p: "/race/start", s: "Start the lobby countdown", d: "What the START button does. The race begins when the countdown (Settings → start countdown) hits zero.", params: [P("now", "0|1", "skip the countdown, start immediately", { in: "query", default: 0 })], res: { ok: true, affected: 1 }, err: "409 no lobby with cars" },
     { m: "POST", p: "/race/end", s: "Force-end the race", params: [], res: { ok: true, affected: 1 } },
     { m: "POST", p: "/race/next", s: "Next map from the queue", d: "Works from the post-game screen or anywhere idle. The queue is set by `/lobby` or the Play tab.", params: [], res: { ok: true, affected: 1 }, err: "409 race running / nothing queued" },

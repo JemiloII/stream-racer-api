@@ -46,7 +46,9 @@ static class Routes
                 string path = t.name; for (var par = t.parent; par != null; par = par.parent) path = par.name + "/" + path;
                 if (needle.Length > 0 && !path.ToLowerInvariant().Contains(needle)) continue;
                 var tmp = t.GetComponent<TMPro.TMP_Text>();
-                list.Add(new { path, active = t.gameObject.activeInHierarchy, comps = t.GetComponents<Component>().Select(c => c?.GetType().Name).ToArray(), text = tmp?.text?.Substring(0, System.Math.Min(80, tmp.text.Length)), children = t.childCount });
+                var rt = t as RectTransform;
+                list.Add(new { path, active = t.gameObject.activeInHierarchy, comps = t.GetComponents<Component>().Select(c => c?.GetType().Name).ToArray(), text = tmp?.text?.Substring(0, System.Math.Min(80, tmp.text.Length)), children = t.childCount,
+                    rect = rt == null ? null : new { w = rt.rect.width, h = rt.rect.height, y = rt.anchoredPosition.y, pivotY = rt.pivot.y, anchorMinY = rt.anchorMin.y, anchorMaxY = rt.anchorMax.y }, pref = tmp?.preferredHeight });
                 if (list.Count >= max) break;
             }
             return list;
@@ -216,18 +218,7 @@ static class Routes
                     case "sweep": ok = Cam.Shot(() => Cam.Sweep(secs, fov1, fov2), secs); break;
                     case "grid": ok = Cam.Shot(() => Cam.Grid(secs), secs); break;
                     case "side": ok = Cam.Shot(() => Cam.Side(secs, fov1, fov2), secs); break;
-                    case "color":
-            {
-                if (x == null) { status = 400; return new { error = "need /color/:x?color=" }; }
-                string c = q["color"];
-                if (x == "reset") { Settings.Current.colors.Clear(); Settings.Persist(); return Ok(0); }
-                if (c == null) { Settings.Current.colors.Remove(x.ToLowerInvariant()); Settings.Persist(); return Ok(1); }
-                if (!Game.SetColor(x, c)) { status = 400; return new { error = "bad color", color = c }; }
-                Plugin.Emit("color", new { login = x.ToLowerInvariant(), color = Settings.Current.colors[x.ToLowerInvariant()] });
-                return Ok(1);
-            }
-
-            case "finish": ok = Cam.Shot(() => Cam.Finish(secs, fov1, fov2), secs); break;
+                    case "finish": ok = Cam.Shot(() => Cam.Finish(secs, fov1, fov2), secs); break;
                     case "high": ok = Cam.Shot(() => Cam.High(secs, fov1, fov2), secs); break;
                     case "chase":
                     case "front":
@@ -255,6 +246,13 @@ static class Routes
 
             case "lobby":
             {
+                if (x == "exit")
+                {
+                    if (!Game.InLobby) { status = 409; return new { error = "not in a lobby" }; }
+                    var exit = GameObject.Find("PreGameCanvas/PreGameScreen/Content/Box 1/Game Settings Overview/Buttons/Exit")?.GetComponent<UnityEngine.UI.Button>();
+                    if (exit == null) { status = 500; return new { error = "exit button not found" }; }
+                    exit.onClick.Invoke(); return Ok(1);
+                }
                 var r = Game.CreateLobby(q["map"]);
                 if (r == null) { status = 409; return new { error = Game.Running ? "race running" : Game.InLobby ? "already in a lobby" : "not on the home screen" }; }
                 if (r == "opening") status = 202;

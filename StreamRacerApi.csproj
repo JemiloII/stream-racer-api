@@ -10,6 +10,7 @@
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
     <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
   </PropertyGroup>
   <ItemGroup>
@@ -20,7 +21,7 @@
     <Reference Include="lib/*.dll" Private="false" />
   </ItemGroup>
   <!-- commit stamp: read once at build, "dev" outside git -->
-  <Target Name="GitStamp" BeforeTargets="CoreCompile">
+  <Target Name="GitStamp" BeforeTargets="GetAssemblyAttributes;GenerateAssemblyInfo">
     <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" ContinueOnError="true" StandardOutputImportance="low" StandardErrorImportance="low" IgnoreExitCode="true">
       <Output TaskParameter="ConsoleOutput" PropertyName="GitCommit" />
       <Output TaskParameter="ExitCode" PropertyName="GitExit" />

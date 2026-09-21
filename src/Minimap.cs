@@ -36,13 +36,6 @@ static class Minimap
     static Bounds _bounds;
     static float _half;
 
-    // "16:9", "4:3", "1:1", "21:9", "auto" (track shape) -> width/height
-    static float AspectRatio(string a, float track)
-    {
-        var p = (a ?? "").Trim().ToLowerInvariant().Split(':');
-        if (p.Length == 2 && float.TryParse(p[0], out var w) && float.TryParse(p[1], out var hh) && w > 0 && hh > 0) return w / hh;
-        return track;
-    }
     public static void Configure(JObject o) { Current = o?.ToObject<Cfg>() ?? new Cfg(); Apply(); }
 
     public static object State => new
@@ -64,8 +57,7 @@ static class Minimap
         foreach (var p in route) _bounds.Encapsulate(p);
 
         float trackAspect = Mathf.Max(0.1f, _bounds.size.x) / Mathf.Max(0.1f, _bounds.size.z);
-        float ar = AspectRatio(Current.aspect, trackAspect);
-        float h = Mathf.Clamp(Current.w * Screen.width / Screen.height / ar, 0.03f, 0.95f); // same ratio as the /minimap page
+        float h = Pure.MapHeight(Current.w, Screen.width, Screen.height, Pure.AspectRatio(Current.aspect, trackAspect)); // same ratio as the /minimap page
         float boxAspect = (Current.w * Screen.width) / Mathf.Max(1f, h * Screen.height);
         _half = Mathf.Max(_bounds.extents.z, _bounds.extents.x / boxAspect) * Current.pad + 2f;
 
