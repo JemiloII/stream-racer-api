@@ -266,7 +266,7 @@ export default function Settings() {
           <span>Viewers can respawn their own car from chat</span>
         </label>
         <div class="ovgrid">
-          <label>Respawn command<input defaultValue=${settings.respawnCommand || "!race respawn"} onBlur=${(e) => e.target.value.trim() !== (settings.respawnCommand || "!race respawn") && saveSettings({ respawnCommand: e.target.value.trim() || "!race respawn" })} /></label>
+          <label>Respawn command<input key=${settings.respawnCommand || ""} defaultValue=${settings.respawnCommand || "!race respawn|!respawn"} onBlur=${(e) => e.target.value.trim() !== (settings.respawnCommand || "!race respawn") && saveSettings({ respawnCommand: e.target.value.trim() || "!race respawn|!respawn" })} /></label>
           <p class="hint" style=${{ margin: "26px 0 0" }}>The game's stuck-car reset, for the racer who typed it. Only during a race.</p>
         </div>
       </article>
@@ -282,7 +282,7 @@ export default function Settings() {
           <span>Viewers can set their color from chat</span>
         </label>
         <div class="ovgrid">
-          <label>Chat command<input defaultValue=${settings.colorCommand || "!race color"} onBlur=${(e) => e.target.value.trim() !== (settings.colorCommand || "!race color") && saveSettings({ colorCommand: e.target.value.trim() || "!color" })} /></label>
+          <label>Chat command<input key=${settings.colorCommand || ""} defaultValue=${settings.colorCommand || "!race color|!color"} onBlur=${(e) => e.target.value.trim() !== (settings.colorCommand || "!race color") && saveSettings({ colorCommand: e.target.value.trim() || "!race color|!color" })} /></label>
           <p class="hint" style=${{ margin: "26px 0 0" }}>e.g. <code>${settings.colorCommand || "!race color"} #ff8800</code> or <code>${settings.colorCommand || "!race color"} red</code>. Remembered per viewer and applied whenever they join. ${Object.keys(settings.colors || {}).length} saved.</p>
           ${Object.keys(settings.colors || {}).length ? html`<button class="secondary outline" onClick=${() => api("/color/reset")}>Forget all saved colors</button>` : null}
         </div>
