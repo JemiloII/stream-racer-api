@@ -47,6 +47,8 @@ test.describe("Controls page", () => {
       return;
     }
     await expect(board.locator(".row-r")).toHaveCount(vehicles.length);
-    await expect(board.locator(".row-r .nm")).toContainText(vehicles.map((vehicle) => vehicle.displayName));
+    // Places reshuffle 4×/s during a race, so compare the set of names, not the order the fetch happened to see.
+    await expect.poll(async () => (await board.locator(".row-r .nm").allTextContents()).map((text) => text.replace(/YOU$/, "")).sort())
+      .toEqual(vehicles.map((vehicle) => vehicle.displayName).sort());
   });
 });

@@ -33,8 +33,9 @@ describe('GET /race', () => {
       expect(vehicle.pct).toBeGreaterThanOrEqual(0);
       expect(vehicle.pct).toBeLessThanOrEqual(100);
       expect(vehicle.state).toEqual(expect.any(String));
-      expect(vehicle.x).toEqual(expect.any(Number));
-      expect(vehicle.z).toEqual(expect.any(Number));
+      if (vehicle.state === 'spawning') continue; // lobby: the car has no game object yet, so no position
+      expect(vehicle.x, `${vehicle.login} (${vehicle.state}) x`).toEqual(expect.any(Number));
+      expect(vehicle.z, `${vehicle.login} (${vehicle.state}) z`).toEqual(expect.any(Number));
     }
   });
 });

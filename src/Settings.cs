@@ -17,6 +17,10 @@ static class Settings
     public class Webhook { public string @event = "race_end"; public string url = ""; public string method = "POST"; public string header = ""; public string body = ""; public bool enabled = true; }
     public static bool AutoBoosts(string login) => login != null && (!Current.botOptions.TryGetValue(login.ToLowerInvariant(), out var o) || o.autoBoost);
 
+    // Camera director: which shots it may pick. Missing key = on (Pure.ShotEnabled). Manual POST /camera/<shot> ignores this.
+    public class CameraOpts { public Dictionary<string, bool> shots = DefaultShots(); }
+    public static Dictionary<string, bool> DefaultShots() => Pure.ShotKeys.ToDictionary(k => k, _ => true);
+
     public class Perks
     {
         public string colorCommand = "follower";   // who may use the chat color command
@@ -38,8 +42,10 @@ static class Settings
         public bool colorLeaderboard = true;   // in-game leaderboard names in each car's color
         public bool colorCommandEnabled = true; // viewers can set their own color from chat
         public bool respawnCommandEnabled = true; // viewers can respawn their own car from chat
-        public string respawnCommand = "!race respawn";
-        public string colorCommand = "!race color";  // e.g. "!color #ff8800" or "!color red"
+        public string respawnCommand = "!race respawn|!respawn"; // aliases separated by | or , (Pure.CommandAliases)
+        public string colorCommand = "!race color|!color";       // e.g. "!color #ff8800" or "!color red"
+        public bool chatReplies = true; // confirm chat commands in Twitch chat through the game's own connection (Game.SayInChat)
+        public CameraOpts camera = new(); // director shot toggles: camera.shots.{grid,high,side,sweep,pack,front,chase,orbit,overhead,prop,finish,duel,pileup,boom}
         public Dictionary<string, string> colors = new(); // login -> hex, persisted; applied whenever they join
         public Perks perks = new();
         public string twitchToken = "";    // optional: a token with moderator:read:followers (from your overlay/bot app) for follower checks
@@ -58,6 +64,9 @@ static class Settings
     public static List<string> Bots => Current.bots ?? DefaultBots.ToList();
     public static bool IsBot(string login) => login != null && (Bots.Contains(login.ToLowerInvariant()) || Current.customBots.Any(b => b.login == login.ToLowerInvariant()));
     public static Entry CustomBot(string login) => login == null ? null : Current.customBots.FirstOrDefault(b => b.login == login.ToLowerInvariant());
+    public static List<string> RespawnCommands => Pure.CommandAliases(Current.respawnCommand);
+    public static List<string> ColorCommands => Pure.CommandAliases(Current.colorCommand);
+    public static Dictionary<string, bool> Shots => Current.camera?.shots;
 
     static readonly string File = Path.Combine(Paths.ConfigPath, "shibiko.streamracer.settings.json");
     public static Model Current = Load();
@@ -65,8 +74,19 @@ static class Settings
 
     static Model Load()
     {
-        try { return JsonConvert.DeserializeObject<Model>(System.IO.File.ReadAllText(File)) ?? new Model(); }
-        catch { return new Model(); }
+        Model m;
+        try { m = JsonConvert.DeserializeObject<Model>(System.IO.File.ReadAllText(File)) ?? new Model(); }
+        catch { m = new Model(); }
+        return Upgrade(m);
+    }
+
+    // Settings files written before the alias lists hold the old single commands: give them the short aliases too.
+    static Model Upgrade(Model m)
+    {
+        if ((m.respawnCommand ?? "").Trim() == "!race respawn") m.respawnCommand = "!race respawn|!respawn";
+        if ((m.colorCommand ?? "").Trim() == "!race color") m.colorCommand = "!race color|!color";
+        m.camera ??= new CameraOpts(); m.camera.shots ??= DefaultShots();
+        return m;
     }
 
     public static void Persist() => System.IO.File.WriteAllText(File, JsonConvert.SerializeObject(Current, Formatting.Indented));
@@ -85,6 +105,12 @@ static class Settings
         if (m.bots != null) m.bots = m.bots.Select(l => l.Trim().ToLowerInvariant()).Where(l => l.Length > 0).Distinct().ToList();
         m.colors ??= new Dictionary<string, string>();
         m.perks ??= new Perks(); m.twitchToken ??= ""; m.twitchClientId ??= ""; m.botOptions ??= new Dictionary<string, BotOpts>(); m.webhooks ??= new List<Webhook>();
+        m.twitchToken = Pure.CleanToken(m.twitchToken); m.twitchClientId = (m.twitchClientId ?? "").Trim();
+        if (m.twitchToken != Current.twitchToken || m.twitchClientId != Current.twitchClientId) Game.ForgetFollowers(); // a new token: redo the lookups
+        if (string.IsNullOrWhiteSpace(m.respawnCommand)) m.respawnCommand = "!race respawn|!respawn";
+        if (string.IsNullOrWhiteSpace(m.colorCommand)) m.colorCommand = "!race color|!color";
+        Upgrade(m);
+        foreach (var k in Pure.ShotKeys) if (!m.camera.shots.ContainsKey(k)) m.camera.shots[k] = true; // a partial PUT never switches shots off by accident
         m.customBots = (m.customBots ?? new()).Where(e => !string.IsNullOrWhiteSpace(e.login)).Select(e => { e.login = e.login.Trim().ToLowerInvariant(); e.id ??= ""; return e; }).ToList();
         Current = m;
         System.IO.File.WriteAllText(File, JsonConvert.SerializeObject(m, Formatting.Indented));
@@ -95,7 +121,8 @@ static class Settings
     public static object WithConfig() => new
     {
         Current.autoJoinStreamer, Current.streamerColor, Current.autoJoin, Current.customBots,
-        Current.colorLeaderboard, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), Current.ui, Current.overlay, minimap = Minimap.State, bots = Bots,
+        Current.colorLeaderboard, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.chatReplies, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken),
+        followerChecks = Game.FollowerChecks, followerChecksError = Game.FollowerCheckError, camera = Current.camera, Current.ui, Current.overlay, minimap = Minimap.State, bots = Bots,
         config = ConfigDto(),
     };
 

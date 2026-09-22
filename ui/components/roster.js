@@ -57,7 +57,7 @@ export function Card({ r, picked, inLobby, onClick, tools, badges, children, pic
   return html`
     <div class=${"card" + (picked ? " on" : "") + (inLobby ? " in" : "") + (r.missing ? " bad" : "")} onClick=${onClick}>
       <div class="tools">${tools}</div>
-      ${badges?.length ? html`<div class="badges">${badges.map((b) => html`<span key=${b} class=${"badge " + b.toLowerCase().replace(/\W+/g, "-")}>${b}</span>`)}</div>` : null}
+      <div class="badges">${(badges || []).map((b) => html`<span key=${b} class=${"badge " + b.toLowerCase().replace(/\W+/g, "-")}>${b}</span>`)}</div>
       ${pic}
       <div class="nm" style=${r.kind === "custom" && r.color ? { color: r.color } : {}}>${r.displayName || r.login}</div>
       <div class="lg">${r.missing ? "not on Twitch" : (r.kind === "custom" ? "custom · " : "@") + r.login}${inLobby ? " · in lobby" : ""}</div>

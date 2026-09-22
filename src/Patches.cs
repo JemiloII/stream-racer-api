@@ -37,7 +37,7 @@ static class Patches
     static void OnPoolBoost(CFBJLEBOFHJ __instance, bool __result) { if (__result) Plugin.Emit("boost", Game.EventDto(__instance)); }
 
     [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.StartCurrentGame))]
-    static void OnStart() { Game.ResetBoomTracking(); Game.EnsureAvatars(); Cam.OnRaceStart(); Game.NoteRaceStart(); Plugin.Instance.StartCoroutine(Minimap.WhenRunning()); Plugin.Instance.StartCoroutine(Game.AutoBoostRace()); Plugin.Emit("race_start", Game.Snapshot()); }
+    static void OnStart() { Game.ResetBoomTracking(); Game.EnsureAvatars(); Cam.OnRaceStart(); Game.NoteRaceStart(); Plugin.Instance.StartCoroutine(Minimap.WhenRunning()); Plugin.Instance.StartCoroutine(Game.AutoBoostRace()); Plugin.Emit("race_start", Game.Snapshot()); Game.EmitBoostPools(); }
 
     [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.AddFinisherToCurrentGame))]
     static void OnFinisher(CFBJLEBOFHJ KGEKACHOBHK)
@@ -54,6 +54,10 @@ static class Patches
     {
         if (__state) { Game.Ended = true; Cam.OnRaceEnd(); Minimap.Destroy(); Plugin.Emit("race_end", Game.Snapshot()); }
     }
+
+    // Saved color before the game builds the lobby row and spawns the preview, so the car and its row match from the start.
+    [HarmonyPrefix, HarmonyPatch(typeof(VehicleManager), nameof(VehicleManager.AddVehicle))]
+    static void BeforeAdd(CFBJLEBOFHJ LOHGEJIOPJL) { if (LOHGEJIOPJL != null) Game.ApplySavedColor(LOHGEJIOPJL); }
 
     [HarmonyPostfix, HarmonyPatch(typeof(VehicleManager), nameof(VehicleManager.AddVehicle))]
     static void OnAdd(CFBJLEBOFHJ LOHGEJIOPJL)
@@ -77,7 +81,7 @@ static class Patches
     [HarmonyPostfix, HarmonyPatch(typeof(TwitchCommandListener), "CHOJMKCDOGG")]
     static void OnChat(TwitchLib.Client.Events.OnMessageReceivedArgs KGCAKNNGBDA)
     {
-        try { var m = KGCAKNNGBDA?.ChatMessage; if (m != null) Game.OnChatMessage(m.Username, m.Message); } catch { }
+        try { var m = KGCAKNNGBDA?.ChatMessage; if (m != null) Game.OnChatMessage(m.Username, m.Message, m.DisplayName); } catch { }
     }
 
     // AI driver's per-frame speed logic overwrites the multiplier; reapply ours after it.
@@ -106,6 +110,7 @@ static class Patches
             var who = t.GetField("JDDOIMHIFHK")?.GetValue(__instance) as CKINOOFAKJL;
             var img = t.GetField("LJLJGFLLMOF")?.GetValue(__instance) as UnityEngine.UI.RawImage;
             Game.ApplyImage(who, img, __instance);
+            Game.ColorRowName(who, t.GetField("AKAMDOKJAIE")?.GetValue(__instance) as TMPro.TextMeshProUGUI); // lobby/results name in the car's color
         }
     }
 

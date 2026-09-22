@@ -23,7 +23,7 @@ Windows Defender or another scanner may flag the download. Nothing here hides wh
 - **`winhttp.dll` next to the game exe** is BepInEx's loader. Windows looks for that DLL in the game folder before the system one, so the game loads BepInEx, which loads plugins from `BepInEx/plugins`. "A DLL that replaces a Windows DLL and injects code into another process" is the pattern scanners look for, even though it is the standard, open-source way Unity games get modded (BepInEx: https://github.com/BepInEx/BepInEx).
 - **`StreamRacerApi.dll`** is this plugin. It patches a few game methods in memory with Harmony (race start/end, chat, camera, car AI slow-down) so it can raise events and take commands. It never writes to the game's files.
 - **It opens a local web server** on port 8793 (`127.0.0.1` only unless you turn on `api.BindAll`) for the control page, overlays and the API. Software that opens a listening port from inside a game process can look like a backdoor to a heuristic scanner. The only outbound requests are to Twitch (profile pictures and, if you paste a token, follower checks), your optional update URL, and whatever webhooks you configure.
-- **It reads Twitch chat** through the game's own Twitch connection, only to answer the color and respawn commands.
+- **It reads Twitch chat** through the game's own Twitch connection, only to answer the color and respawn commands, and (Settings → `chatReplies`, on by default) writes one line back to confirm a color command. If you paste a token for follower checks it is only ever sent to Twitch's own API.
 
 If your scanner quarantines it: the whole thing is source, this repo is all of it. Read `src/`, build it yourself with `./install.sh` (needs the .NET 8 SDK and Git Bash), and add the game folder to your scanner's exclusions. The release zip is that same build, nothing more. No telemetry, no accounts, no launcher.
 
@@ -49,10 +49,21 @@ Log: `BepInEx/LogOutput.log`.
 
 - **Controls**: camera director (auto / leader / overhead / boom cam / free, plus 🎥 per racer), boost-me button, boom / boost / add-boost / slow / respawn for the field, live timing board with per-racer actions and search.
 - **Bots**: custom bots (your own login, name, color, picture upload; no Twitch account) plus a saved list of well-known Twitch accounts (resolved live, real avatars). Add/remove, drop them into the lobby or the auto-join list. Their cars fire their own boosts: first 0-4 s after the start, then every 6-18 s, preferring straights.
-- **Settings**: perks (chat color command tier, colored-name tier, stacking extra boosts for follower / subscriber / developer / host, optional Twitch token for follower checks), your own auto-join + car color, auto-join list, in-game mini map (toggle, position, size), overlay look & feel (applies live to open browser sources), API token for this browser, read-only plugin config.
+- **Camera**: every shot as a button, plus "Director uses" switches (`settings.camera.shots`) to keep the auto director off shots you don't want.
+- **Settings**: perks (chat color command tier, colored-name tier, stacking extra boosts for follower / subscriber / developer / host, optional Twitch token for follower checks), your own auto-join + car color, auto-join list, in-game mini map (toggle, position, size), overlay look & feel split into the horizontal bar and the leaderboard (rows, size, side, link builder; applies live to open browser sources), API token for this browser, read-only plugin config.
 - **API**: route reference with a request tester and a live `/events` viewer.
 
-Works as an OBS custom browser dock. Pages and the overlay reconnect on their own when the game restarts (the browser retries the event stream every few seconds and the page resyncs on reconnect). The one thing that can't self-heal: if OBS loads the page while the game is closed there is no page at all, so add the source with the game running, or tick "Refresh browser when scene becomes active".
+### Browser sources (OBS)
+
+Transparent pages served by the plugin, one source each, all following Settings live. They draw nothing outside a race: after `race_end` the cars fade out over a second (the finish banner stays a few seconds), then nothing until the next `race_start`; `settings.overlay.showInLobby` (Settings → Overlay look, off by default) shows the field in the lobby too.
+
+| source | what | query params (override the saved look for that source) |
+|---|---|---|
+| `/overlay` | horizontal bar: avatars along a track line stacked by place, RIP / boost / finish banner | `?size=40&names=0&accent=%23ff8a00&token=` |
+| `/leaderboard` | vertical top-N list: place, avatar, name, progress. Make it smaller (`scale`) so the mini map fits above it | `?rows=10&side=left\|right&scale=1&accent=%23ff8a00&token=` |
+| `/minimap` | route outline + car dots, same look as the in-game map | `?aspect=16:9&names=1&leaderBig=1&track=%23fff&bg=%23000&alpha=0.55&marker=3&token=` |
+
+Works as an OBS custom browser dock. Pages and the overlays reconnect on their own when the game restarts (the browser retries the event stream every few seconds and the page resyncs on reconnect). The one thing that can't self-heal: if OBS loads the page while the game is closed there is no page at all, so add the source with the game running, or tick "Refresh browser when scene becomes active".
 
 ## API
 
@@ -61,8 +72,9 @@ Works as an OBS custom browser dock. Pages and the overlay reconnect on their ow
 | route | |
 |---|---|
 | `GET /race` | `{running, streamer, vehicles:[{place,id,login,displayName,color,sub,type,progress,finishAt,pct,finished,boosts,image,avatar,title}]}` |
-| `GET /events` | SSE: `lobby`, `joined`, `race_start`, `positions` (TickHz full snapshot), `pos` (PosHz, light `{t, v:[[login,x,z,pct,place,finished]…]}`), `finisher`, `race_end` (snapshot); `boom`, `boost`, `respawn`, `developer`, `crash`, `recovered` (one vehicle; booms/boosts include chat-triggered ones; `crash` = flipped / off road / stuck for over 1 s, with a `pileup` count) |
-| `GET /overlay` | transparent OBS browser source: avatars along a track line stacked by place, RIP/boost effects. `?size=56&board=5&names=0&token=` |
+| `GET /events` | SSE: `lobby`, `joined`, `race_start`, `positions` (TickHz full snapshot), `pos` (PosHz, light `{t, v:[[login,x,z,pct,place,finished]…]}`), `finisher`, `race_end` (snapshot); `boom`, `boost` (a pool spend, `boosts` = what is left), `respawn`, `developer`, `crash`, `recovered` (one vehicle; booms/boosts include chat-triggered ones; `crash` = flipped / off road / stuck for over 1 s, with a `pileup` count); `boosts` `{login, boosts, delta}` when a pool changes without a boost firing (add, perk, race start); `perk` `{login, extraBoosts, reasons, boosts, followerChecks}` per joined car; `color`, `denied`, `chat` (chat commands and replies); `camera`, `settings`, `screen` |
+| `GET /overlay` | browser source, the horizontal bar: avatars along a track line stacked by place, RIP/boost effects. `?size=56&names=0&token=` |
+| `GET /leaderboard` | browser source, the vertical top-N list. `?rows=10&side=left&scale=1&token=` |
 | `GET /me` | `{id, login, inRace}` |
 | `POST /boom` | one random car (skips cars already mid-boom) |
 | `POST /boom/:n` | n random booms (n ≤ 200), `affected` = real hits |
@@ -70,21 +82,24 @@ Works as an OBS custom browser dock. Pages and the overlay reconnect on their ow
 | `POST /boom/all?except=:x` | everyone but one |
 | `POST /boost/me` | spend one of the streamer's boosts (= `!boost`) |
 | `POST /boost/:x\|all?force=&seconds=` | fire a boost now, free. Defaults = game's random range. Negative force = shove backwards. |
-| `POST /boost/:x\|all/add?n=1` | add to the `!boost` pool |
+| `POST /boost/:x\|all/add?n=1` | add to the `!boost` pool; a single target answers `{boosts}`; fires `boosts` |
 | `POST /speed/:x\|all?mult=0.5&seconds=5` | top-speed multiplier for a while |
 | `POST /respawn/:x\|all` | the game's stuck-car respawn |
 | `POST /join` | body `{id,login,displayName,color,sub,image}` or array. Lobby only. Non-Twitch names work (bots). `image` (URL or local path) replaces the avatar in the lobby/results lists. |
 | `POST /join/me?color=` | add the streamer's own car (= JOIN GAME button); color defaults to the saved "my car color"; lobby only |
-| `POST /color/:x?color=` | set a racer's color (hex or name), remembered for future joins; viewers can use the chat command (default `!color`) |
+| `POST /color/:x?color=` | set a racer's color (hex or name), remembered for future joins and shown on the car, the lobby row and the leaderboard; viewers can use any alias in `settings.colorCommand` (default `!race color\|!color`), confirmed in chat when `settings.chatReplies` is on |
+| `GET /perks/:login` | `{login, follower, subscriber, developer, host, extraBoosts, why[], followerChecks: ok\|no token\|unknown, followerChecksError, granted, boosts}`: why someone did or didn't get extra boosts. `no token` = paste a Twitch token with `moderator:read:followers` + its client id on Settings → Perks |
+| `GET /chat` | `{connected, channel, replies, canSend, scopes}`: whether the mod can talk in chat through the game's connection (`canSend` = the game token has `chat:edit`; null until looked up) |
+| `POST /chat/say?text=` | say a line in Twitch chat as the streamer (409 when chat is not connected); emits `chat` |
 | `POST /finish/:x` | mark a racer finished (runs the car's finish-line trigger; for the game bug where a car crosses without triggering it) |
 | `POST /kick/:x` | lobby only |
 | `PUT /config` | live plugin config: `{port, bindAll, token, hotkeyBoost, camUp, camDown, tickHz, posHz}`; port/bind changes restart the server |
-| `GET\|PUT /settings` | PUT merges: `autoJoin` (everyone on it joins every lobby), `bots`, `customBots`, `botOptions[login].autoBoost`, `webhooks` (call anything on `race_end` etc.), `perks`… + read-only `config` |
+| `GET\|PUT /settings` | PUT merges: `autoJoin` (everyone on it joins every lobby), `bots`, `customBots`, `botOptions[login].autoBoost`, `webhooks` (call anything on `race_end` etc.), `perks`, `camera.shots` (director toggles: grid, high, side, sweep, pack, front, chase, orbit, overhead, prop, finish, duel, pileup, boom; omitted keys stay on), `chatReplies`, `respawnCommand` / `colorCommand` (alias lists, `a\|b`), `twitchToken` + `twitchClientId` (follower checks)… + read-only `config`, `followerChecks` |
 | `POST /autojoin/join` | join the list now (lobby only) |
 | `GET /twitch/users?logins=a,b` | resolve logins via Helix with the game's token: `{users:[{id,login,displayName,image,description}]}` |
 | `GET /image/:login` | a racer's custom join image, served by the plugin (so local paths work in browser overlays); `avatar` points here when set |
 | `GET /screen` | `{screen, scene, running, lobby, vehicles}`; a `screen` SSE event fires on every change |
-| `GET /camera` | `{auto, mode, target}` |
+| `GET /camera` | `{auto, mode, target, cars, fov, shots}` (`shots` = the director toggles from `settings.camera.shots`; manual shots ignore them) |
 | `POST /camera/auto?on=` | toggle/set the director: pack / chase / orbit / game follow / overhead with random FOVs and zooms, cuts to booms |
 | `POST /camera/pack`, `/sweep`, `/side`, `/high`, `/finish`, `/front/:x`, `/chase/:x`, `/orbit/:x`, `/overhead`, `/boom`, `/prop` | custom shots; `?seconds=` (0 = stay) `&fov=` `&fovTo=` (zoom over the shot) |
 | `POST /camera/focus/:x`, `/leader`, `/free` | the game's own follow / free cam |
@@ -125,7 +140,7 @@ Four suites, `pnpm` only (`pnpm install` once). `pnpm test` = unit + api; `pnpm 
 
 `SR_API` overrides the base URL (default `http://127.0.0.1:8793`), `SR_TOKEN` supplies the bearer when `api.Token` is set. `pnpm typecheck` runs `tsc --noEmit` over every TypeScript test. Shared helpers live in `tests/support/` (`apiClient`, `gameScreen`, `eventStream`, `sourceVersion`, `settingsStore`); `tests/api/version.test.ts` fails when the installed DLL is not the build from `src/Plugin.cs`.
 
-UI tests: `pnpm test:ui` (Playwright + TypeScript; `tests/ui/` mirrors `ui/`: `pages/`, `components/`, `app`, `overlay`, `minimap`, shared fixtures in `tests/ui/fixtures/`). They open every control page plus `/overlay` and `/minimap` in headless Chromium against the running game and compare the DOM with `/settings`, `/version` and `/race`, failing on any console error or uncaught exception. Read-only: nothing that changes game state is clicked. If the game is down every test skips with a printed reason. `SR_API` overrides the base URL (default `http://127.0.0.1:8793`); screenshots land in `test-results/` on failure only. `pnpm typecheck` type-checks the specs.
+UI tests: `pnpm test:ui` (Playwright + TypeScript; `tests/ui/` mirrors `ui/`: `pages/`, `components/`, `app`, `overlay`, `leaderboard`, `minimap`, shared fixtures in `tests/ui/fixtures/`). They open every control page plus `/overlay`, `/leaderboard` and `/minimap` in headless Chromium against the running game and compare the DOM with `/settings`, `/version` and `/race`, failing on any console error or uncaught exception. The pages, `.js` and `.css` are served from the working tree (`fixtures/working-tree.ts` routes them; API calls still hit the game), so a UI change is testable without rebuilding the DLL; `SR_UI_LIVE=1` tests the embedded copy instead. Overlay behaviour (fade after `race_end`, lobby visibility, live boost counters) is driven through a fake `EventSource` (`fixtures/fake-events.ts`) so the live race cannot interfere; the Bots page also gets a layout check at 1400×1100 and 1000×800 (nothing outside its card, badges clear of tools and picture, one baseline per form row). Read-only: nothing that changes game state is clicked. If the game is down every test skips with a printed reason. `SR_API` overrides the base URL (default `http://127.0.0.1:8793`); screenshots land in `test-results/` on failure only. `pnpm typecheck` type-checks the specs.
 
 ## Layout
 
@@ -137,8 +152,9 @@ src/Patches.cs   Harmony: race lifecycle events, free-cam keys, slow re-apply
 src/Settings.cs  persisted page settings + auto-join
 src/Pure.cs      engine-free logic (boost zones, versions, mini map math, colors, chat parsing); what the unit tests cover
 ui/              control page (React + zustand + htm from esm.sh, Pico CSS); one .js + .css per page/component
+                 overlay.* (bar) + leaderboard.* (list) share overlay-shared.js (event stream, snapshot, race phase); minimap.* stands alone
 tests/unit/      xunit tests, mirroring src/: tests/unit/Pure/<Concern>Tests.cs, one file per section of Pure.cs
-tests/ui/        Playwright UI tests mirroring ui/ (pages/, components/, app, overlay, minimap); fixtures/ = server truth + console guard
+tests/ui/        Playwright UI tests mirroring ui/ (pages/, components/, app, overlay, leaderboard, minimap); fixtures/ = server truth, console guard, working-tree router, fake EventSource
 tests/*.mjs      end-to-end tests against a running game
 scripts/         release.sh (release zip), bepinex.sh (BepInEx version/URL + download cache), post-commit (semver bump hook, amends the commit)
 ```

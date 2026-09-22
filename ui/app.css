@@ -1,6 +1,8 @@
-.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 14px; padding: 0 22px; height: 62px; background: rgba(10,11,13,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+/* Sticky header. Narrow docks (OBS) wrap the tabs onto a second line instead of clipping them. */
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 22px; min-height: 62px; box-sizing: border-box; background: rgba(10,11,13,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .topbar::before { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: repeating-linear-gradient(90deg, var(--hazard) 0 18px, #000 18px 36px); opacity: .85; }
-.brand { font: 700 22px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.topbar .tag { white-space: nowrap; }
+.brand { font: 700 22px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
 .brand small { display: block; font: 600 10px/1 var(--display); letter-spacing: .3em; color: var(--dim); margin-top: 4px; }
 .tabs { margin-left: auto; display: flex; border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden; }
 .tabs button { margin: 0; background: transparent; border: 0; border-left: 1px solid var(--line-2); border-radius: 0; color: var(--dim); padding: 8px 16px; font-size: 12px; letter-spacing: .14em; }

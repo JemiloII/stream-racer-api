@@ -1,32 +1,112 @@
-import { test, expect } from "./fixtures/test";
+import { test, expect, type Page } from "./fixtures/test";
+import { installFakeEvents, emitEvent, mockJson } from "./fixtures/fake-events";
+import { racingSnapshot, lobbySnapshot, endedSnapshot, idleSnapshot, SAMPLE_LOGINS } from "./fixtures/sample-race";
 
-// OBS browser source (ui/overlay.html): a track line with avatars, leaderboard and banners. Standalone, no React.
-test.describe("Overlay browser source", () => {
-  test("loads with the track line, finish flag and racer container", async ({ page, server }) => {
-    await page.goto("/overlay");
-    const track = page.locator("#track");
-    await expect(track).toBeAttached();
-    await expect(track.locator(".line")).toHaveCount(1);
-    await expect(track.locator(".flag")).toHaveCount(1);
-    await expect(page.locator("#board")).toBeAttached();
-    await expect(page.locator("#banner")).toBeAttached();
-    await expect(page.locator("#racers .racer")).toHaveCount(server.race.vehicles.length);
-    await expect(page.locator("body")).not.toHaveClass(/no-names/);
+// OBS browser source (ui/overlay.html): the horizontal bar, a track line with avatars stacked by place plus the
+// RIP / finish banner. Standalone, no React. The vertical list is its own source (leaderboard.spec.ts).
+// The race comes from a mocked /race and a fake event stream so the spec, not the live game, decides the phase.
+const trackOpacity = (page: Page) => page.evaluate(() => Number(getComputedStyle(document.getElementById("track") as HTMLElement).opacity));
+
+test.describe("Overlay browser source (horizontal bar)", () => {
+  test.beforeEach(async ({ page }) => {
+    await installFakeEvents(page);
+    await mockJson(page, "/settings", { overlay: {} });
   });
 
-  test("?names=0 hides the names under the avatars", async ({ page, server }) => {
+  test("draws the track line, the finish flag and one avatar per car, in race order, while a race is running", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/overlay");
+    await expect(page.locator("body")).not.toHaveClass(/no-race/);
+    await expect(page.locator("#track .line")).toBeVisible();
+    await expect(page.locator("#track .flag")).toBeVisible();
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    await expect(page.locator("#racers .racer .place")).toHaveText(["1", "2", "3"]);
+    await expect(page.locator("#racers .racer .name")).toHaveText(["Alpha", "Bravo", "Charlie"]);
+    await expect(page.locator("#banner")).toBeAttached();
+  });
+
+  test("has no leaderboard of its own and ignores the old ?board= param (that list is the /leaderboard source)", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/overlay?board=5");
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    await expect(page.locator("#board")).toHaveCount(0);
+    await expect(page.locator(".row")).toHaveCount(0);
+  });
+
+  test("?names=0 hides the names under the avatars", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
     await page.goto("/overlay?names=0");
     await expect(page.locator("body")).toHaveClass(/no-names/);
-    if (server.race.vehicles.length) await expect(page.locator("#racers .racer .name").first()).toBeHidden();
-  });
-
-  test("?board=0 turns the leaderboard off", async ({ page }) => {
-    await page.goto("/overlay?board=0");
-    await expect(page.locator("#board")).toBeEmpty();
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    await expect(page.locator("#racers .racer .name").first()).toBeHidden();
   });
 
   test("query params override the accent color from settings", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
     await page.goto("/overlay?accent=%23123456");
     await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--hazard"))).toBe("#123456");
+  });
+
+  test("after race_end the cars fade out for about a second, then nothing is drawn until the next race starts", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/overlay");
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+
+    await emitEvent(page, "race_end", endedSnapshot());
+    await expect(page.locator("body")).toHaveClass(/race-over/);
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length); // still drawn while fading
+    await expect.poll(() => trackOpacity(page), { message: "the track fades rather than vanishing" }).toBeLessThan(1);
+
+    await expect(page.locator("body")).toHaveClass(/no-race/, { timeout: 3000 });
+    await expect(page.locator("#racers .racer")).toHaveCount(0);
+    await expect(page.locator("#track")).toBeHidden();
+
+    // The next lobby does not bring the bar back (showInLobby is off by default); the next race start does.
+    await emitEvent(page, "lobby", lobbySnapshot());
+    await expect(page.locator("#track")).toBeHidden();
+    await expect(page.locator("#racers .racer")).toHaveCount(0);
+    await emitEvent(page, "race_start", racingSnapshot());
+    await expect(page.locator("#track")).toBeVisible();
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    await expect.poll(() => trackOpacity(page)).toBe(1);
+  });
+
+  test("the finish banner stays up for a few seconds after the cars have gone", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/overlay");
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    await emitEvent(page, "finisher", { login: "alpha_racer", displayName: "Alpha", place: 1 });
+    const banner = page.locator("#banner");
+    await expect(banner).toHaveClass(/show/);
+    await expect(banner).toHaveClass(/fin/);
+    await expect(banner).toHaveText("Alpha finished 1st");
+    await emitEvent(page, "race_end", endedSnapshot());
+    await expect(page.locator("#racers .racer")).toHaveCount(0, { timeout: 3000 });
+    await expect(banner).toHaveClass(/show/); // the banner runs on its own 3 s timer, longer than the 1 s fade
+    await expect(banner).toBeVisible();
+  });
+
+  test("draws nothing in a lobby unless settings.overlay.showInLobby is on", async ({ page }) => {
+    await mockJson(page, "/race", lobbySnapshot());
+    await page.goto("/overlay");
+    await expect(page.locator("body")).toHaveClass(/no-race/);
+    await expect(page.locator("#track")).toBeHidden();
+    await expect(page.locator("#racers .racer")).toHaveCount(0);
+
+    await emitEvent(page, "settings", { overlay: { showInLobby: true } });
+    await expect(page.locator("#track")).toBeVisible();
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+
+    await emitEvent(page, "settings", { overlay: { showInLobby: false } });
+    await expect(page.locator("#track")).toBeHidden();
+    await expect(page.locator("#racers .racer")).toHaveCount(0);
+  });
+
+  test("draws nothing on the post-game or home screen even though the cars are still listed", async ({ page }) => {
+    await mockJson(page, "/race", idleSnapshot());
+    await page.goto("/overlay");
+    await expect(page.locator("body")).toHaveClass(/no-race/);
+    await expect(page.locator("#track")).toBeHidden();
+    await expect(page.locator("#racers .racer")).toHaveCount(0);
   });
 });

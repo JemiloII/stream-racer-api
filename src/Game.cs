@@ -404,7 +404,15 @@ static class Game
     }
 
     public static int Boosts(CFBJLEBOFHJ v) => (int)BoostsField.GetValue(v);
-    public static void AddBoosts(CFBJLEBOFHJ v, int n) => BoostsField.SetValue(v, Boosts(v) + n);
+    public static void AddBoosts(CFBJLEBOFHJ v, int n)
+    {
+        BoostsField.SetValue(v, Boosts(v) + n);
+        EmitBoosts(v, n);
+    }
+    // `boosts` = a pool changed without a boost being fired (add, perk, race start). Pool spends are the `boost` event (pool patch).
+    public static void EmitBoosts(CFBJLEBOFHJ v, int delta = 0) =>
+        Plugin.Emit("boosts", new { login = Login(v), displayName = v.JDDOIMHIFHK.AMCIKHEHBGM, boosts = Boosts(v), delta });
+    public static void EmitBoostPools() { foreach (var v in Vehicles()) EmitBoosts(v); }
 
     public static bool Respawn(CFBJLEBOFHJ v)
     {
@@ -557,22 +565,32 @@ static class Game
     public static bool IsDev(CFBJLEBOFHJ v) => (Title(v) ?? "").IndexOf("developer", System.StringComparison.OrdinalIgnoreCase) >= 0;
     public static bool IsHost(CFBJLEBOFHJ v) => Login(v) != null && Login(v) == StreamerLogin;
 
-    // Follower checks need a token with moderator:read:followers (the game's own token lacks it). Cached per login.
+    // Follower checks need a token with moderator:read:followers (the game's own token lacks it): Settings -> Perks, pasted
+    // into settings.twitchToken + twitchClientId. Without one, followers are simply never detected (status "no token").
+    // Successful lookups are cached per login for the session; failures are not (a 401 must not brand someone a non-follower).
     static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _followers = new();
-    static readonly HashSet<string> _followPending = new();
-    public static bool FollowerKnown(string login) => _followers.ContainsKey(login ?? "");
-    public static bool IsFollower(string login) => login != null && _followers.TryGetValue(login, out var f) && f;
+    static readonly Dictionary<string, List<System.Action<bool>>> _followPending = new(); // login -> callbacks waiting on one lookup
+    public static string FollowerCheckError; // last Helix failure, shown in /settings and /perks/:login
+    public static bool FollowerKnown(string login) => _followers.ContainsKey((login ?? "").ToLowerInvariant());
+    public static bool IsFollower(string login) => login != null && _followers.TryGetValue(login.ToLowerInvariant(), out var f) && f;
     public static bool FollowerChecksAvailable => !string.IsNullOrEmpty(Settings.Current.twitchToken) && !string.IsNullOrEmpty(Settings.Current.twitchClientId) && !string.IsNullOrEmpty(StreamerId);
+    public static string FollowerChecks => Pure.FollowerCheckStatus(!string.IsNullOrEmpty(Settings.Current.twitchToken), !string.IsNullOrEmpty(Settings.Current.twitchClientId), !string.IsNullOrEmpty(StreamerId), FollowerCheckError);
+    public static void ForgetFollowers() { _followers.Clear(); FollowerCheckError = null; }
 
     public static void CheckFollower(string login, string userId, System.Action<bool> then = null)
     {
         if (login == null || !FollowerChecksAvailable) { then?.Invoke(false); return; }
+        login = login.ToLowerInvariant();
         if (_followers.TryGetValue(login, out var known)) { then?.Invoke(known); return; }
-        lock (_followPending) { if (!_followPending.Add(login)) return; }
+        lock (_followPending)
+        {
+            if (_followPending.TryGetValue(login, out var waiting)) { if (then != null) waiting.Add(then); return; } // one lookup, every caller told
+            _followPending[login] = then != null ? new List<System.Action<bool>> { then } : new List<System.Action<bool>>();
+        }
         string token = Settings.Current.twitchToken, cid = Settings.Current.twitchClientId, bid = StreamerId;
         ThreadPool.QueueUserWorkItem(_ =>
         {
-            bool result = false;
+            bool result = false, ok = false;
             try
             {
                 var wc = new WebClient(); wc.Headers["Authorization"] = "Bearer " + token; wc.Headers["Client-Id"] = cid;
@@ -587,45 +605,114 @@ static class Game
                     var d = Newtonsoft.Json.Linq.JObject.Parse(wc.DownloadString($"https://api.twitch.tv/helix/channels/followers?broadcaster_id={bid}&user_id={uid}"))["data"];
                     result = d != null && d.HasValues;
                 }
+                ok = true; FollowerCheckError = null;
             }
-            catch (System.Exception e) { Plugin.Log.LogWarning("follower check failed for " + login + ": " + e.Message); }
-            _followers[login] = result;
-            lock (_followPending) _followPending.Remove(login);
-            Plugin.RunOnMain(() => then?.Invoke(result));
+            catch (WebException e)
+            {
+                var code = (e.Response as HttpWebResponse)?.StatusCode;
+                FollowerCheckError = code == HttpStatusCode.Unauthorized ? "401: token rejected (needs moderator:read:followers for this channel; the client id must be the token's)" : code != null ? (int)code + ": " + e.Message : e.Message;
+                Plugin.Log.LogWarning("follower check failed for " + login + ": " + FollowerCheckError);
+            }
+            catch (System.Exception e) { FollowerCheckError = e.Message; Plugin.Log.LogWarning("follower check failed for " + login + ": " + e.Message); }
+            if (ok) _followers[login] = result;
+            List<System.Action<bool>> callbacks;
+            lock (_followPending) { _followPending.TryGetValue(login, out callbacks); _followPending.Remove(login); }
+            Plugin.RunOnMain(() => { if (callbacks != null) foreach (var cb in callbacks) cb(result); });
         });
     }
 
-    static bool TierAllows(string tier, CFBJLEBOFHJ v, string login)
-    {
-        switch ((tier ?? "everyone").ToLowerInvariant())
-        {
-            case "off": return false;
-            case "everyone": case "free": return true;
-            case "follower": return (v != null && (IsSub(v) || IsDev(v) || IsHost(v))) || IsFollower(login);
-            case "subscriber": case "sub": return v != null && (IsSub(v) || IsDev(v) || IsHost(v));
-        }
-        return true;
-    }
+    static bool TierAllows(string tier, CFBJLEBOFHJ v, string login) =>
+        Pure.TierAllows(tier, IsFollower(login), v != null && IsSub(v), v != null && IsDev(v), v != null && IsHost(v));
     public static bool MayUseColorCommand(string login) => TierAllows(Settings.Current.perks.colorCommand, Find(login), login);
     public static bool MayShowColoredName(CFBJLEBOFHJ v) => TierAllows(Settings.Current.perks.coloredNames, v, Login(v));
 
-    // Extra boosts on join: follower + subscriber + developer + host, stacking. Runs once the backend title is in.
+    // Extra boosts on join: follower + subscriber + developer + host, stacking (Pure.ExtraBoosts). Runs once the backend
+    // title is in. Sub/dev/host are known at once; the follower part waits for the Helix lookup, then the whole grant applies.
     public static readonly HashSet<CFBJLEBOFHJ> _perked = new();
     public static void GrantPerks(CFBJLEBOFHJ v)
     {
         if (v == null || _perked.Contains(v)) return;
         _perked.Add(v);
-        var p = Settings.Current.perks; int extra = 0; var why = new List<string>();
-        if (IsSub(v) && p.boostSubscriber != 0) { extra += p.boostSubscriber; why.Add("sub"); }
-        if (IsDev(v) && p.boostDeveloper != 0) { extra += p.boostDeveloper; why.Add("dev"); }
-        if (IsHost(v) && p.boostHost != 0) { extra += p.boostHost; why.Add("host"); }
+        var p = Settings.Current.perks;
         void Apply()
         {
-            if (IsFollower(Login(v)) && p.boostFollower != 0) { extra += p.boostFollower; why.Add("follower"); }
-            if (extra != 0 && Vehicles().Contains(v)) { AddBoosts(v, extra); Plugin.Emit("perk", new { login = Login(v), displayName = v.JDDOIMHIFHK.AMCIKHEHBGM, extraBoosts = extra, reasons = why, boosts = Boosts(v) }); }
+            if (!Vehicles().Contains(v)) return;
+            var (extra, why) = Pure.ExtraBoosts(p.boostFollower, p.boostSubscriber, p.boostDeveloper, p.boostHost, IsFollower(Login(v)), IsSub(v), IsDev(v), IsHost(v));
+            if (extra != 0) AddBoosts(v, extra);
+            Plugin.Emit("perk", new { login = Login(v), displayName = v.JDDOIMHIFHK.AMCIKHEHBGM, extraBoosts = extra, reasons = why, boosts = Boosts(v), followerChecks = FollowerChecks, follower = IsFollower(Login(v)) });
         }
         if (p.boostFollower != 0 && FollowerChecksAvailable && !FollowerKnown(Login(v))) CheckFollower(Login(v), v.JDDOIMHIFHK.DNJFGHLIAIM, _ => Apply());
         else Apply();
+    }
+
+    // GET /perks/:login: what someone gets and why (or why not). Unknown follower status kicks off a lookup; ask again.
+    public static object PerksDto(string login)
+    {
+        login = (login ?? "").ToLowerInvariant();
+        var v = Find(login); var p = Settings.Current.perks;
+        bool sub = v != null && IsSub(v), dev = v != null && IsDev(v), host = login == (StreamerLogin ?? "").ToLowerInvariant();
+        if (p.boostFollower != 0 && FollowerChecksAvailable && !FollowerKnown(login)) CheckFollower(login, v?.JDDOIMHIFHK.DNJFGHLIAIM);
+        var (extra, why) = Pure.ExtraBoosts(p.boostFollower, p.boostSubscriber, p.boostDeveloper, p.boostHost, IsFollower(login), sub, dev, host);
+        string status = FollowerChecks;
+        if (p.boostFollower == 0) why.Add("follower boost is 0 in Settings -> Perks");
+        else if (status == "no token") why.Add("follower boost needs a Twitch token with moderator:read:followers + its client id (Settings -> Perks)");
+        else if (status == "unknown") why.Add("follower lookup failed: " + (FollowerCheckError ?? "streamer not logged in"));
+        else if (!FollowerKnown(login)) why.Add("follower lookup pending: ask again in a second");
+        else if (!IsFollower(login)) why.Add("not a follower");
+        return new
+        {
+            login, inRace = v != null, follower = IsFollower(login), followerKnown = FollowerKnown(login), subscriber = sub, developer = dev, host,
+            extraBoosts = extra, why, followerChecks = status, followerChecksError = FollowerCheckError,
+            granted = v != null && _perked.Contains(v), boosts = v != null ? (int?)Boosts(v) : null, perks = p,
+        };
+    }
+
+    // ---- chat replies ----
+    // The game's TwitchLib client (TwitchCommandListener.LMGJJMLKMPA) is logged in as the streamer with the game token.
+    // Sending needs chat:edit on that token; Twitch drops the message silently without it, so GET /chat reports the scopes.
+    static readonly System.Reflection.FieldInfo ChatClientField = AccessTools.Field(typeof(TwitchCommandListener), "LMGJJMLKMPA");
+    static TwitchLib.Client.Interfaces.ITwitchClient ChatClient => TwitchCommandListener.NEPFAEJAMGI == null ? null : ChatClientField?.GetValue(TwitchCommandListener.NEPFAEJAMGI) as TwitchLib.Client.Interfaces.ITwitchClient;
+    public static string ChatChannel { get { try { var c = ChatClient; return c != null && c.JoinedChannels.Count > 0 ? c.JoinedChannels[0].Channel : StreamerLogin; } catch { return StreamerLogin; } } }
+    public static bool ChatConnected { get { try { return ChatClient?.IsConnected == true; } catch { return false; } } }
+
+    public static bool SayInChat(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        try
+        {
+            var c = ChatClient; if (c == null || !c.IsConnected) return false;
+            string ch = ChatChannel; if (string.IsNullOrEmpty(ch)) return false;
+            c.SendMessage(ch, text.Length > 480 ? text.Substring(0, 480) : text);
+            Plugin.Emit("chat", new { channel = ch, text });
+            return true;
+        }
+        catch (System.Exception e) { Plugin.Log.LogWarning("chat send failed: " + e.Message); return false; }
+    }
+    static void Reply(string text) { if (Settings.Current.chatReplies) SayInChat(text); }
+
+    // Scopes of the game's token (id.twitch.tv/oauth2/validate), refreshed hourly: chat:edit present = replies show up.
+    static List<string> _scopes; static System.DateTime _scopesAt = System.DateTime.MinValue; static bool _scopesBusy; static string _scopesError;
+    public static object ChatStatus()
+    {
+        string token = TwitchToken;
+        if (!string.IsNullOrEmpty(token) && !_scopesBusy && (System.DateTime.UtcNow - _scopesAt).TotalSeconds > 3600)
+        {
+            _scopesBusy = true;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    var wc = new WebClient(); wc.Headers["Authorization"] = "OAuth " + token;
+                    var o = Newtonsoft.Json.Linq.JObject.Parse(wc.DownloadString("https://id.twitch.tv/oauth2/validate"));
+                    _scopes = o["scopes"]?.Select(s => (string)s).ToList() ?? new List<string>(); _scopesError = null;
+                }
+                catch (System.Exception e) { _scopesError = e.Message; }
+                _scopesAt = System.DateTime.UtcNow; _scopesBusy = false; // no Unity API off the main thread
+            });
+        }
+        bool? canSend = _scopes == null ? (bool?)null : _scopes.Contains("chat:edit");
+        return new { connected = ChatConnected, channel = ChatChannel, login = StreamerLogin, replies = Settings.Current.chatReplies, canSend, scopes = _scopes, scopesError = _scopesError,
+                     note = canSend == false ? "the game's token has no chat:edit: Twitch drops replies; relay the color/denied SSE events from your bot instead" : canSend == null ? "scopes not known yet: ask again" : null };
     }
 
     // ---- colors ----
@@ -651,6 +738,8 @@ static class Game
         if (persist) { Settings.Current.colors[login] = "#" + ColorUtility.ToHtmlStringRGB(c); Settings.Persist(); }
         var v = Find(login);
         if (v != null) { v.JDDOIMHIFHK.EKPDDGFGLNI = c; RecolorLabel(v, c); }
+        if (!Running) foreach (var row in Object.FindObjectsOfType<PreGamePlayerListItem>()) // the lobby row is built once: repaint its name now
+            if (row.JDDOIMHIFHK?.JLDPKDLFPJP == login) ColorRowName(row.JDDOIMHIFHK, row.AKAMDOKJAIE);
         return true;
     }
 
@@ -688,27 +777,39 @@ static class Game
         }
     }
 
-    // Chat: "!color <value>" from a viewer sets their own color.
-    public static void OnChatMessage(string login, string message)
+    // Chat: "!color <value>" from a viewer sets their own color; "!respawn" respawns their car. Aliases: settings.*Command ("a|b").
+    public static void OnChatMessage(string login, string message, string displayName = null)
     {
         if (string.IsNullOrEmpty(login) || string.IsNullOrEmpty(message)) return;
-        if (Settings.Current.respawnCommandEnabled && Pure.CommandArg(message, Settings.Current.respawnCommand) == "")
+        login = login.ToLowerInvariant(); displayName = string.IsNullOrEmpty(displayName) ? login : displayName;
+        if (Settings.Current.respawnCommandEnabled && Pure.CommandArg(message, Settings.RespawnCommands) == "")
         {
-            var mine = Find(login); if (mine != null && Respawn(mine)) Plugin.Emit("respawn", EventDto(mine));
+            var mine = Find(login); if (mine != null) Respawn(mine); // Respawn emits the respawn event itself
             return;
         }
         if (!Settings.Current.colorCommandEnabled) return;
-        string cmd = (Settings.Current.colorCommand ?? "!race color").Trim();
-        string arg = Pure.CommandArg(message, cmd);
+        var cmds = Settings.ColorCommands; string cmd = cmds.Count > 0 ? cmds[0] : "!race color";
+        string arg = Pure.CommandArg(message, cmds);
         if (string.IsNullOrEmpty(arg)) return;
         var tier = Settings.Current.perks.colorCommand;
-        if (tier == "follower" && FollowerChecksAvailable && !FollowerKnown(login) && Find(login) == null)
-        {   // unknown follower status: look it up, then retry once
-            CheckFollower(login, null, _ => { if (MayUseColorCommand(login) && SetColor(login, arg)) Plugin.Emit("color", new { login, color = Settings.Current.colors[login.ToLowerInvariant()] }); });
-            return;
+        void Done()
+        {
+            if (!MayUseColorCommand(login)) { Plugin.Emit("denied", new { login, displayName, command = cmd, tier, followerChecks = FollowerChecks }); Reply(Pure.ColorDeniedReply(displayName, tier)); return; }
+            if (!SetColor(login, arg)) return;
+            string hex = Settings.Current.colors[login];
+            Plugin.Emit("color", new { login, displayName, color = hex }); Reply(Pure.ColorSetReply(displayName, hex));
         }
-        if (!MayUseColorCommand(login)) { Plugin.Emit("denied", new { login, command = cmd, tier }); return; }
-        if (SetColor(login, arg)) Plugin.Emit("color", new { login, color = Settings.Current.colors[login.ToLowerInvariant()] });
+        if (tier == "follower" && FollowerChecksAvailable && !FollowerKnown(login) && Find(login) == null) CheckFollower(login, null, _ => Done()); // look it up, then decide
+        else Done();
+    }
+
+    // Lobby / results row: the name in the car's color (same switch and tier rule as the leaderboard). Runs from the list-item postfix.
+    public static void ColorRowName(CKINOOFAKJL who, TMPro.TextMeshProUGUI name)
+    {
+        if (who == null || name == null) return;
+        var v = Find(who.JLDPKDLFPJP);
+        bool on = Settings.Current.colorLeaderboard && Pure.TierAllows(Settings.Current.perks.coloredNames, IsFollower(who.JLDPKDLFPJP), who.HIMCIABAFNG || (v != null && IsSub(v)), v != null && IsDev(v), who.JLDPKDLFPJP != null && who.JLDPKDLFPJP == StreamerLogin);
+        name.color = on ? who.EKPDDGFGLNI : Color.white;
     }
 
     public static bool Kick(CFBJLEBOFHJ v)

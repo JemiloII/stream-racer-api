@@ -15,7 +15,8 @@ export interface ServerSettings {
   colorCommand: string;
   respawnCommand: string;
   minimap: { enabled: boolean; aspect: string; names: boolean; leaderBig: boolean };
-  overlay: { names?: boolean; board?: number };
+  overlay: { names?: boolean; board?: number; boardSide?: "left" | "right"; boardScale?: number; showInLobby?: boolean };
+  camera?: { shots?: Record<string, boolean> };
   ui: { cameraOnControls?: boolean };
   config: { port: number; hotkeyBoost?: string; tokenRequired: boolean };
 }

@@ -1,13 +1,15 @@
 .bots { display: grid; gap: 14px; }
 .hint-inline { margin-left: 10px; font: 400 12px var(--pico-font-family); letter-spacing: 0; text-transform: none; color: var(--mute); }
 .bots .lookup { margin-bottom: 12px; }
+/* Custom-bot form: every control is 38 px tall under a 12 px label, so one row shares one baseline at any width. */
 .cbform { display: grid; grid-template-columns: 1fr 1fr 120px 150px 1fr auto; gap: 8px; align-items: end; }
-@media (max-width: 1000px) { .cbform { grid-template-columns: 1fr 1fr; } }
-.cbform label { margin: 0; font-size: 12px; color: var(--dim); }
-.cbform label > * { margin: 3px 0 0 !important; height: 38px; box-sizing: border-box; }
+@media (max-width: 1000px) { .cbform { grid-template-columns: 1fr 1fr; } .cbform > button { justify-self: start; } }
+@media (max-width: 640px) { .cbform { grid-template-columns: 1fr; } }
+.cbform > label { margin: 0; font-size: 12px; color: var(--dim); min-width: 0; }
+.cbform > label > * { margin: 3px 0 0 !important; height: 38px; box-sizing: border-box; }
 .cbform input { padding: 0 10px; font: 600 13px var(--display); letter-spacing: 0; text-transform: none; }
 .cbform input[type=color] { padding: 2px 4px; }
-.cbform > button { margin: 0; height: 38px; }
+.cbform > button { margin: 0; height: 38px; width: max-content; padding: 0 18px; }
 .colorrow { display: flex; gap: 4px; }
 .colorrow button { margin: 0 !important; height: 38px; padding: 0 10px; font-size: 11px; }
 .colorrow button.on { background: var(--hazard); color: #000; border-color: var(--hazard); }
@@ -15,5 +17,5 @@
 .filebtn { display: flex; align-items: center; padding: 0 10px; background: #0b0d10; border: 1px solid var(--line-2); border-radius: 4px; color: var(--dim); font: 600 13px var(--display); cursor: pointer; overflow: hidden; }
 .filebtn:hover { color: #eef0f2; border-color: #eef0f2; }
 .filebtn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.people > header { display: flex; align-items: center; justify-content: space-between; }
+.people > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .people > header b { color: #eef0f2; }

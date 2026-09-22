@@ -82,4 +82,85 @@ public static class Pure
         if (m.Length > cmd.Length && !char.IsWhiteSpace(m[cmd.Length])) return null; // "!race colorful" is not "!race color"
         return m.Substring(cmd.Length).Trim();
     }
+
+    // Several aliases: the first one that matches wins ("!race respawn|!respawn"). Null when none does.
+    public static string CommandArg(string message, IEnumerable<string> commands)
+    {
+        if (commands == null) return null;
+        foreach (var c in commands) { var a = CommandArg(message, c); if (a != null) return a; }
+        return null;
+    }
+
+    // "!race respawn|!respawn" or "!race respawn, !respawn" -> ["!race respawn", "!respawn"]. Empty parts are dropped.
+    public static List<string> CommandAliases(string list)
+    {
+        var result = new List<string>();
+        foreach (var part in (list ?? "").Split('|', ',')) { var t = part.Trim(); if (t.Length > 0) result.Add(t); }
+        return result;
+    }
+
+    // Chat confirmations for the color command.
+    public static string ColorSetReply(string displayName, string hex) => "@" + (displayName ?? "") + " color set to " + (hex ?? "");
+    public static string ColorDeniedReply(string displayName, string tier) => "@" + (displayName ?? "") + " color is for " + (tier ?? "") + "+";
+
+    // ---- perks ----
+    // Tiers: "everyone" | "follower" | "subscriber" | "off". Subs, devs and the host count as followers.
+    public static bool TierAllows(string tier, bool isFollower, bool isSub, bool isDev, bool isHost)
+    {
+        switch ((tier ?? "everyone").Trim().ToLowerInvariant())
+        {
+            case "off": return false;
+            case "everyone": case "free": return true;
+            case "follower": return isSub || isDev || isHost || isFollower;
+            case "subscriber": case "sub": return isSub || isDev || isHost;
+        }
+        return true;
+    }
+
+    // Extra boosts on join: follower + subscriber + developer + host, stacking. `reasons` says which applied.
+    public static (int count, List<string> reasons) ExtraBoosts(int boostFollower, int boostSubscriber, int boostDeveloper, int boostHost,
+        bool isFollower, bool isSub, bool isDev, bool isHost)
+    {
+        int n = 0; var why = new List<string>();
+        if (isFollower && boostFollower != 0) { n += boostFollower; why.Add("follower"); }
+        if (isSub && boostSubscriber != 0) { n += boostSubscriber; why.Add("sub"); }
+        if (isDev && boostDeveloper != 0) { n += boostDeveloper; why.Add("dev"); }
+        if (isHost && boostHost != 0) { n += boostHost; why.Add("host"); }
+        return (n, why);
+    }
+
+    // Why a follower boost may be missing: "ok" (checks can run), "no token" (nothing pasted on the Settings page,
+    // so followers are never detected), "unknown" (a token is set but the last lookup failed or the streamer id is missing).
+    public static string FollowerCheckStatus(bool tokenSet, bool clientIdSet, bool streamerKnown, string lastError)
+    {
+        if (!tokenSet || !clientIdSet) return "no token";
+        if (!streamerKnown || !string.IsNullOrEmpty(lastError)) return "unknown";
+        return "ok";
+    }
+
+    // Twitch tokens are pasted in every shape: "oauth:abc", "Bearer abc", "abc". Keep the bare token.
+    public static string CleanToken(string token)
+    {
+        var t = (token ?? "").Trim();
+        foreach (var prefix in new[] { "oauth:", "bearer " })
+            if (t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) t = t.Substring(prefix.Length).Trim();
+        return t;
+    }
+
+    // ---- camera director ----
+    public static readonly string[] ShotKeys = { "grid", "high", "side", "sweep", "pack", "front", "chase", "orbit", "overhead", "prop", "finish", "duel", "pileup", "boom" };
+
+    // Director shot key -> toggle name: "high2" is a high shot, "front:login" a front shot, "wide:login" has no toggle ("wide").
+    public static string ShotKind(string key)
+    {
+        var k = (key ?? "").Split(':')[0].Trim().ToLowerInvariant();
+        return k == "high2" ? "high" : k;
+    }
+
+    // Missing toggle = enabled: an old settings file (or a partial PUT) never switches a shot off by accident.
+    public static bool ShotEnabled(IDictionary<string, bool> shots, string key)
+    {
+        var kind = ShotKind(key);
+        return shots == null || !shots.TryGetValue(kind, out var on) || on;
+    }
 }

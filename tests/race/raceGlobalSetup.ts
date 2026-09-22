@@ -8,8 +8,9 @@ import { currentScreen, idleScreens } from '../support/gameScreen';
 import { readSettings, writeSettings } from '../support/settingsStore';
 
 export default async function raceGlobalSetup(project: TestProject): Promise<(() => Promise<void>) | undefined> {
-  const scanDir = (project.config.dir ?? project.config.root).replace(/\\/g, '/');
-  if (scanDir.endsWith('/tests/api')) return undefined; // read-only run: nothing to guard
+  // `--dir tests/api` arrives relative, `--dir D:/.../tests/api` absolute: compare the tail either way.
+  const scanDir = (project.config.dir ?? project.config.root).replace(/\\/g, '/').replace(/\/$/, '');
+  if (scanDir === 'tests/api' || scanDir.endsWith('/tests/api')) return undefined; // read-only run: nothing to guard
 
   const probe = await probeGame();
   if (!probe.online) return undefined; // the setup file skips every test with the reason

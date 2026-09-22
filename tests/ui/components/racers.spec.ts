@@ -1,4 +1,36 @@
-import { test, expect } from "../fixtures/test";
+import { test, expect, card, type RaceSnapshot } from "../fixtures/test";
+import { installFakeEvents, emitEvent } from "../fixtures/fake-events";
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Boost pools change between the 4 Hz snapshots; the store patches them from the `boost` / `boosts` events at once.
+test.describe("Racers board · live boost counters", () => {
+  test("boosts-left counters follow the boost and boosts events without waiting for the next positions snapshot", async ({ page, server }) => {
+    const vehicles = server.race.vehicles;
+    test.skip(!vehicles.length, "no cars on track");
+    await installFakeEvents(page); // the real stream is never opened, so no live snapshot can overwrite the patched value
+    await page.goto("/controls");
+    const rows = page.locator("article.board .row-r");
+    await expect(rows).toHaveCount(vehicles.length);
+
+    const streamerCar = vehicles.find((vehicle) => vehicle.login === server.race.streamer);
+    const target = streamerCar ?? (vehicles[0] as RaceSnapshot["vehicles"][number]);
+    const row = rows.filter({ has: page.locator(".lg", { hasText: new RegExp(`^${escapeRegExp(target.login)}( · sub)?$`) }) });
+    const counter = row.locator(".quick .boosts b");
+    await expect(counter).toHaveText(String(target.boosts));
+
+    await emitEvent(page, "boosts", { login: target.login, boosts: target.boosts + 40 });
+    await expect(counter).toHaveText(String(target.boosts + 40));
+    await emitEvent(page, "boost", { login: target.login, displayName: target.displayName, boosts: target.boosts + 39 });
+    await expect(counter).toHaveText(String(target.boosts + 39));
+    if (streamerCar) await expect(card(page, /^Driver$/).locator(".hero-meta b").first()).toHaveText(String(target.boosts + 39));
+
+    // The next full snapshot is the truth again.
+    await emitEvent(page, "positions", server.race);
+    await expect(counter).toHaveText(String(target.boosts));
+    if (streamerCar) await expect(card(page, /^Driver$/).locator(".hero-meta b").first()).toHaveText(String(target.boosts));
+  });
+});
 
 // The timing board (ui/components/racers.js) is shared by Controls and Camera; it is driven by /race.
 test.describe("Racers board", () => {
@@ -23,7 +55,9 @@ test.describe("Racers board", () => {
     const rows = page.locator("article.board .row-r");
     await expect(rows).toHaveCount(vehicles.length);
     await expect(rows.locator(".pos")).toHaveText(vehicles.map((vehicle) => String(vehicle.place)));
-    await expect(rows.locator(".lg")).toContainText(vehicles.map((vehicle) => vehicle.login));
+    // during a live race the order can shift between the API fetch and this check: compare as sets
+    const shownLogins = (await rows.locator(".lg").allTextContents()).map((text) => text.split(" ")[0]).sort();
+    expect(shownLogins).toEqual(vehicles.map((vehicle) => vehicle.login).sort());
     for (const row of await rows.all()) {
       await expect(row.locator(".quick button")).toHaveCount(8);
       await expect(row.locator(".quick .boosts b")).toHaveText(/^\d+$/);

@@ -62,7 +62,9 @@ static class Cam
         string target = null; float dist = 0, height = 0, behind = 0, sideways = 0;
         var followT = FollowCam.NEPFAEJAMGI?.KKPFHEIDONO;
         CFBJLEBOFHJ near = null; float nd = float.MaxValue;
-        foreach (var v in Racing()) { float d = Vector3.Distance(Anchor(v).position, t.position); if (d < nd) { nd = d; near = v; } }
+        foreach (var v in Racing()) {
+        float d = Vector3.Distance(Anchor(v).position, t.position);
+        if (d < nd) { nd = d; near = v; } }
         if (near != null)
         {
             target = Game.Login(near); dist = nd;
@@ -77,7 +79,9 @@ static class Cam
                      nearest = target, dist, height, behind, sideways, followTarget = followT != null ? followT.root.name : null, carsInView = inView, racing = Racing().Count, leaderInView };
     }
 
-    public static object State => new { auto = Auto, mode = Mode, target = Target, cars = _cars, fov = Camera.main != null ? Camera.main.fieldOfView : 0f };
+    public static object State => new { auto = Auto, mode = Mode, target = Target, cars = _cars, fov = Camera.main != null ? Camera.main.fieldOfView : 0f, shots = Settings.Shots };
+    // Director toggle for a shot key (settings.camera.shots); manual POST /camera/<shot> never asks.
+    static bool On(string key) => Pure.ShotEnabled(Settings.Shots, key);
     static void Announce() => Plugin.Emit("camera", State);
     static bool Ready => Game.Running && FollowCam.NEPFAEJAMGI != null && FreeCam.NEPFAEJAMGI != null;
     public static bool ManualHold => Time.time < _manualUntil;
@@ -504,7 +508,7 @@ static class Cam
     public static void OnBoom(CFBJLEBOFHJ v)
     {
         LastBoomed = v;
-        if (Auto && Game.Running && Time.time >= _autoPausedUntil) { Shot(() => Orbit(v, 6f, 60f, 50f), 6f); _leaderDue = true; } // fuse + launch, then straight back to the leader
+        if (Auto && On("boom") && Game.Running && Time.time >= _autoPausedUntil) { Shot(() => Orbit(v, 6f, 60f, 50f), 6f); _leaderDue = true; } // fuse + launch, then straight back to the leader
     }
 
     static PropCam _lastProp;
@@ -602,7 +606,7 @@ static class Cam
             var racing = Racing(); if (racing.Count == 0) continue;
 
             // priorities: finish, then a track cam a group is about to pass
-            if (Approaching().Count > 0)
+            if (On("finish") && Approaching().Count > 0)
             {
                 if (Mode != "finish") { Finish(0, 60f, 60f); Took("finish"); }
                 _afterFinishShown = false; continue;
@@ -617,7 +621,7 @@ static class Cam
 
             // Crashes: a pile-up (3+ cars down within 8 s) is worth a look; a single crash is not — go find the action.
             int recent = Game.CrashedAt.Values.Count(t => Time.time - t < 8f);
-            if (recent >= 3 && _shotKey != "pileup")
+            if (On("pileup") && recent >= 3 && _shotKey != "pileup")
             {
                 _group = Game.CrashedAt.Keys.Where(v => v != null && v.JPHIMKLIAAO != null).ToList();
                 if (High(0, 60f, 60f)) { Took("pileup"); continue; }
@@ -629,26 +633,26 @@ static class Cam
             }
 
             var ap = ApproachingProp();
-            if (ap != null && ap != _lastProp && age > 6f && Random.value < 0.5f) { Prop(ap); _lastProp = ap; Took("prop"); continue; }
+            if (On("prop") && ap != null && ap != _lastProp && age > 6f && Random.value < 0.5f) { Prop(ap); _lastProp = ap; Took("prop"); continue; }
             if (Mode != "prop") _lastProp = null;
 
             // opening: the launch from the road ahead (cars come at the camera), then one high overview
             float sinceStart = Time.time - _runningSince;
-            if (sinceStart < 6f) { if (Mode != "grid") { Grid(0); Took("grid"); } continue; }
-            if (sinceStart < 16f) { if (Mode != "high") { High(0, 60f, 60f); Took("high"); } continue; }
+            if (sinceStart < 6f && On("grid")) { if (Mode != "grid") { Grid(0); Took("grid"); } continue; }
+            if (sinceStart < 16f && On("high")) { if (Mode != "high") { High(0, 60f, 60f); Took("high"); } continue; }
 
             // the lead changed hands: that's the story, show the new leader from the front for a bit
             var leadNow = Leader();
             if (leadNow != null && _lastLeader != null && leadNow != _lastLeader && age > 4f)
             {
                 _lastLeader = leadNow;
-                if (Front(leadNow, 7f, 60f, 60f)) { Took("front:" + Game.Login(leadNow)); _leaderDue = false; continue; }
+                if (On("front") && Front(leadNow, 7f, 60f, 60f)) { Took("front:" + Game.Login(leadNow)); _leaderDue = false; continue; }
             }
             _lastLeader = leadNow;
 
             // a duel for the lead: top two within 25 units -> a tight side shot on just those two, every so often
             var top2 = racing.OrderByDescending(v => v.MNHJMCLOGPB).Take(2).ToList();
-            if (top2.Count == 2 && top2[0].MNHJMCLOGPB - top2[1].MNHJMCLOGPB < 25f && Time.time - _lastDuel > 40f && age > 8f)
+            if (On("duel") && top2.Count == 2 && top2[0].MNHJMCLOGPB - top2[1].MNHJMCLOGPB < 25f && Time.time - _lastDuel > 40f && age > 8f)
             {
                 _lastDuel = Time.time;
                 if (Side(0, 60f, 60f)) { _group = top2; Took("duel"); continue; }
@@ -671,7 +675,7 @@ static class Cam
             var cands = new List<(string key, System.Func<bool> go, int n, bool lead)>();
             void Add(string key, string kind, CFBJLEBOFHJ car, System.Func<bool> go)
             {
-                if (key == _shotKey || !CandidatePose(kind, car, out var pos, out var look)) return;
+                if (key == _shotKey || !On(key) || !CandidatePose(kind, car, out var pos, out var look)) return;
                 int n = InViewCount(pos, look, 60f, out bool li); cands.Add((key, go, n, li));
             }
             foreach (var c in top) { var cc = c; Add("wide:" + Game.Login(cc), "followwide", cc, () => FollowWide(cc)); }

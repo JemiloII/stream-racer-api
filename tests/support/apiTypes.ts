@@ -40,8 +40,9 @@ export interface Vehicle {
   image: string | null;
   avatar: string | null;
   title: string | null;
-  x: number;
-  z: number;
+  /** World position; null while the car has no game object yet (lobby, state "spawning"). */
+  x: number | null;
+  z: number | null;
 }
 
 export interface RaceSnapshot {
@@ -66,12 +67,68 @@ export interface BoostUseResult extends Affected {
   boosts: number;
 }
 
+export const shotKeys = ['grid', 'high', 'side', 'sweep', 'pack', 'front', 'chase', 'orbit', 'overhead', 'prop', 'finish', 'duel', 'pileup', 'boom'] as const;
+export type ShotKey = (typeof shotKeys)[number];
+
 export interface CameraState {
   auto: boolean;
   mode: string | null;
   target: string | null;
   cars: string[];
   fov: number;
+  /** Director toggles (settings.camera.shots); manual shots ignore them. */
+  shots: Record<ShotKey, boolean>;
+}
+
+export type FollowerChecks = 'ok' | 'no token' | 'unknown';
+
+/** GET /perks/:login */
+export interface PerksInfo {
+  login: string;
+  inRace: boolean;
+  follower: boolean;
+  followerKnown: boolean;
+  subscriber: boolean;
+  developer: boolean;
+  host: boolean;
+  extraBoosts: number;
+  why: string[];
+  followerChecks: FollowerChecks;
+  followerChecksError: string | null;
+  granted: boolean;
+  boosts: number | null;
+  perks: Perks;
+}
+
+/** GET /chat */
+export interface ChatStatus {
+  connected: boolean;
+  channel: string | null;
+  login: string | null;
+  replies: boolean;
+  canSend: boolean | null;
+  scopes: string[] | null;
+  scopesError: string | null;
+  note: string | null;
+}
+
+/** `boosts` SSE event: a pool changed without a boost being fired (add, perk, race start). */
+export interface BoostsEvent {
+  login: string;
+  displayName: string;
+  boosts: number;
+  delta: number;
+}
+
+/** `perk` SSE event: extra boosts decided for a joined car (also fired with 0 so the reason is visible). */
+export interface PerkEvent {
+  login: string;
+  displayName: string;
+  extraBoosts: number;
+  reasons: string[];
+  boosts: number;
+  followerChecks: FollowerChecks;
+  follower: boolean;
 }
 
 export interface MinimapState {
@@ -153,6 +210,11 @@ export interface SettingsDocument {
   webhooks: Webhook[];
   twitchClientId: string;
   twitchTokenSet: boolean;
+  /** Why follower perks may not apply: ok | no token | unknown (token set but the last Helix lookup failed). */
+  followerChecks: FollowerChecks;
+  followerChecksError: string | null;
+  chatReplies: boolean;
+  camera: { shots: Record<ShotKey, boolean> };
   ui: Record<string, unknown>;
   overlay: Record<string, unknown>;
   minimap: MinimapState;

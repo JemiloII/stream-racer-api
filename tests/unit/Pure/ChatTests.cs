@@ -30,4 +30,55 @@ public class ChatTests
     {
         Assert.Null(CommandArg(message, command));
     }
+
+    // settings.respawnCommand / colorCommand hold aliases: "!race respawn|!respawn" (or comma-separated).
+    [Theory]
+    [InlineData("!race respawn|!respawn", new[] { "!race respawn", "!respawn" })]
+    [InlineData("!race color, !color", new[] { "!race color", "!color" })]
+    [InlineData(" !color ", new[] { "!color" })]
+    [InlineData("!a||!b,,", new[] { "!a", "!b" })] // empty parts are dropped
+    [InlineData("", new string[0])]
+    [InlineData(null, new string[0])]
+    public void An_alias_list_splits_on_pipes_and_commas(string list, string[] expected)
+    {
+        Assert.Equal(expected, CommandAliases(list));
+    }
+
+    [Theory]
+    [InlineData("!respawn", "")]                 // the short alias works on its own
+    [InlineData("!race respawn", "")]
+    [InlineData("!RESPAWN  ", "")]
+    [InlineData("!race color red", "red")]
+    [InlineData("!color #ff8800", "#ff8800")]
+    public void Any_alias_in_the_list_matches(string message, string expectedArgument)
+    {
+        var aliases = CommandAliases("!race respawn|!respawn|!race color|!color");
+        Assert.Equal(expectedArgument, CommandArg(message, aliases));
+    }
+
+    [Theory]
+    [InlineData("!respawnnow")]  // longer word: not the command
+    [InlineData("!colorful red")]
+    [InlineData("respawn")]      // no prefix at all
+    [InlineData("!race")]
+    public void A_message_that_matches_no_alias_gives_null(string message)
+    {
+        Assert.Null(CommandArg(message, CommandAliases("!race respawn|!respawn|!race color|!color")));
+        Assert.Null(CommandArg(message, (System.Collections.Generic.IEnumerable<string>)null));
+        Assert.Null(CommandArg(message, new string[0]));
+    }
+
+    [Fact]
+    public void The_single_command_overload_is_unchanged_by_the_alias_one()
+    {
+        Assert.Equal("red", CommandArg("!race color red", "!race color"));
+        Assert.Null(CommandArg("!color red", "!race color")); // a bare "!color" only works once it is in the alias list
+    }
+
+    [Fact]
+    public void Chat_replies_name_the_viewer_and_the_result()
+    {
+        Assert.Equal("@ShibikoX color set to #ff8800", ColorSetReply("ShibikoX", "#ff8800"));
+        Assert.Equal("@ShibikoX color is for follower+", ColorDeniedReply("ShibikoX", "follower"));
+    }
 }

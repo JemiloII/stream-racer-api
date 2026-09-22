@@ -1,6 +1,11 @@
-/* OBS browser source: everything transparent except the widgets. */
-:root { --size: 40px; --hazard: #ffd400; --line: rgba(255,255,255,.35); --line-h: 6px; --bottom: 28px; --side: 24px; --board-scale: 1; --boom: #ff3b30; --boost: #35e0ff; --live: #3ddc84; --font: "Chakra Petch", Impact, sans-serif; }
+/* OBS browser source, the horizontal bar: everything transparent except the widgets. The top-N list is /leaderboard (leaderboard.css). */
+:root { --size: 40px; --hazard: #ffd400; --line: rgba(255,255,255,.35); --line-h: 6px; --bottom: 28px; --side: 24px; --boom: #ff3b30; --boost: #35e0ff; --live: #3ddc84; --font: "Chakra Petch", Impact, sans-serif; }
 html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; font-family: var(--font); color: #fff; }
+
+/* ---- race phase: nothing outside a race; race_end fades the cars out (overlay-shared.js swaps the classes) ---- */
+#track { transition: opacity 1s ease-out; }
+body.race-over #track { opacity: 0; }
+body.no-race #track { display: none; }
 
 /* ---- track ---- */
 #track { position: absolute; left: var(--side); right: var(--side); bottom: var(--bottom); height: calc(var(--size) + 40px); }
@@ -9,7 +14,6 @@ body.no-names #track { --name-h: 0px; }
 #track .line { position: absolute; left: 0; right: 0; bottom: calc(var(--line-c) - var(--line-h) / 2); height: var(--line-h); background: var(--line); border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
 body.no-names .racer .name { display: none; }
 body.no-banner #banner { display: none; }
-body.board-right #board { left: auto; right: var(--side); }
 #track .flag { position: absolute; right: -6px; bottom: calc(var(--line-c) - 11px); width: 22px; height: 22px; background: repeating-conic-gradient(#fff 0 25%, #000 0 50%) 0 0/11px 11px; border: 2px solid #fff; border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
 #racers { position: absolute; inset: 0; }
 .racer { position: absolute; bottom: 0; width: var(--size); margin-left: calc(var(--size) / -2); text-align: center; filter: drop-shadow(0 3px 4px rgba(0,0,0,.7)); }
@@ -31,21 +35,9 @@ body.board-right #board { left: auto; right: var(--side); }
 @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
 @keyframes blink { 50% { opacity: .2; } }
 
-/* ---- banner (RIP / finish) ---- */
+/* ---- banner (RIP / finish): stays up on its own 3 s timer, so a finish banner outlives the fading cars ---- */
 #banner { position: absolute; top: 24px; left: 50%; transform: translateX(-50%) translateY(-20px); opacity: 0; transition: .18s; padding: 8px 18px; background: rgba(0,0,0,.8); border: 2px solid var(--boom); border-radius: 6px; font-size: 26px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
 #banner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #banner.fin { border-color: var(--live); }
 #banner b { color: var(--boom); }
 #banner.fin b { color: var(--live); }
-
-/* ---- leaderboard ---- */
-#board { position: absolute; top: var(--side); left: var(--side); display: grid; gap: 4px; transform: scale(var(--board-scale)); transform-origin: top left; }
-body.board-right #board { transform-origin: top right; }
-#board:empty { display: none; }
-.row { display: grid; grid-template-columns: 26px 28px 1fr; gap: 8px; align-items: center; padding: 4px 10px 4px 6px; background: rgba(0,0,0,.72); border-left: 3px solid var(--c, #fff); border-radius: 4px; font-size: 14px; font-weight: 600; min-width: 180px; text-shadow: 0 1px 2px #000; }
-.row .n { color: rgba(255,255,255,.7); text-align: right; }
-.row:nth-child(1) .n { color: var(--hazard); }
-.row .pic { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: #333; }
-.row .init { display: flex; align-items: center; justify-content: center; font-size: 12px; background: var(--c, #444); }
-.row .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .nm small { color: rgba(255,255,255,.55); margin-left: 6px; font-size: 11px; }

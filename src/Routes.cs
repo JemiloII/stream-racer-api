@@ -80,6 +80,8 @@ static class Routes
                          latest = Updates.Latest, upToDate = Updates.UpToDate, updateUrl = Updates.Url, developer = "Shibiko", twitch = "https://twitch.tv/ShibikoX" };
         }
         if (method == "GET" && root == "me") return new { id = Game.StreamerId, login = Game.StreamerLogin, inRace = Game.StreamerVehicle() != null };
+        if (method == "GET" && root == "perks") { if (string.IsNullOrEmpty(x)) { status = 400; return new { error = "need /perks/:login" }; } return Game.PerksDto(x); }
+        if (method == "GET" && root == "chat") return Game.ChatStatus();
         if (method == "GET" && root == "settings") return Settings.WithConfig();
         if (method == "PUT" && root == "config")
         {
@@ -130,7 +132,11 @@ static class Routes
                 if (sub == "add")
                 {
                     int n = int.TryParse(q["n"], out var v) ? v : 1;
-                    return Targets(x, ref status, t => { Game.AddBoosts(t, n); return true; });
+                    if (x == "all") return Targets(x, ref status, t => { Game.AddBoosts(t, n); return true; });
+                    var t = Game.Find(x);
+                    if (t == null) { status = 404; return new { error = "no vehicle", target = x }; }
+                    Game.AddBoosts(t, n);
+                    return new { ok = true, affected = 1, boosts = Game.Boosts(t) };
                 }
                 float? force = float.TryParse(q["force"], out var f) ? f : null;
                 float? secs = float.TryParse(q["seconds"], out var s) ? s : null;
@@ -173,6 +179,16 @@ static class Routes
                 if (!Game.SetColor(x, c)) { status = 400; return new { error = "bad color", color = c }; }
                 Plugin.Emit("color", new { login = x.ToLowerInvariant(), color = Settings.Current.colors[x.ToLowerInvariant()] });
                 return Ok(1);
+            }
+
+            case "chat":
+            {
+                if (x != "say") break;
+                string text = q["text"];
+                if (string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(body)) { try { text = (string)JObject.Parse(body)["text"]; } catch { } }
+                if (string.IsNullOrWhiteSpace(text)) { status = 400; return new { error = "need ?text= (or {text} body)" }; }
+                if (!Game.SayInChat(text)) { status = 409; return new { error = "chat not connected (game not logged in to Twitch)", chat = Game.ChatStatus() }; }
+                return new { ok = true, affected = 1, channel = Game.ChatChannel, text };
             }
 
             case "finish":

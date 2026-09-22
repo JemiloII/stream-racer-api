@@ -49,26 +49,53 @@ function MinimapForm() {
     <${MinimapLink} />`;
 }
 
-const OV_DEFAULTS = { size: 40, board: 10, names: true, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, bottom: 28, side: 24, boardSide: "left", banner: true, boardScale: 1 };
+// Mirrors DEFAULTS in ui/overlay-shared.js. `board*` keys drive /leaderboard, the rest the bar; accent and side margin apply to both.
+const OV_DEFAULTS = { size: 40, names: true, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, bottom: 28, side: 24, banner: true, showInLobby: false, board: 10, boardSide: "left", boardScale: 1 };
+// Browser-source link for the leaderboard: rows / side / scale as query params so one layout can have a small one and another a big one.
+function LeaderboardLink({ ov }) {
+  const [rows, setRows] = useState(ov.board), [side, setSide] = useState(ov.boardSide), [scale, setScale] = useState(ov.boardScale), [copied, setCopied] = useState(false);
+  const url = `${location.origin}/leaderboard?rows=${encodeURIComponent(rows)}&side=${encodeURIComponent(side)}&scale=${encodeURIComponent(scale)}`;
+  const copy = () => navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); });
+  return html`
+    <div class="mmlink lblink">
+      <label>Rows<input type="number" step="1" min="0" value=${rows} onInput=${(e) => setRows(e.target.value)} /></label>
+      <label>Side<select value=${side} onChange=${(e) => setSide(e.target.value)}><option value="left">left</option><option value="right">right</option></select></label>
+      <label>Scale<input type="number" step="0.1" min="0.2" value=${scale} onInput=${(e) => setScale(e.target.value)} /></label>
+      <input readOnly value=${url} onFocus=${(e) => e.target.select()} />
+      <button class="secondary" onClick=${copy}>${copied ? "Copied" : "Copy link"}</button>
+    </div>`;
+}
 function OverlayForm() {
   const { settings, saveSettings } = useStore();
   const ov = { ...OV_DEFAULTS, ...(settings.overlay || {}) };
   const set = (k, v) => saveSettings({ overlay: { ...ov, [k]: v } });
   return html`
-    <div class="ovgrid">
-      <${Num} obj=${ov} set=${set} k="size" step="1" label="Avatar size (px)" />
-      <${Num} obj=${ov} set=${set} k="board" step="1" label="Leaderboard rows (0 = off)" />
-      <${Num} obj=${ov} set=${set} k="boardScale" label="Leaderboard scale" step="0.1" />
-      <${Num} obj=${ov} set=${set} k="lineHeight" step="1" label="Track line height (px)" />
-      <${Num} obj=${ov} set=${set} k="bottom" step="1" label="Track bottom offset (px)" />
-      <${Num} obj=${ov} set=${set} k="side" step="1" label="Side margin (px)" />
-      <label>Accent color<input type="color" value=${ov.accent} onChange=${(e) => set("accent", e.target.value)} /></label>
-      <label>Track line color<input value=${ov.line} onBlur=${(e) => e.target.value !== ov.line && set("line", e.target.value)} /></label>
-      <label>Leaderboard side<select value=${ov.boardSide} onChange=${(e) => set("boardSide", e.target.value)}><option value="left">left</option><option value="right">right</option></select></label>
-      <label class="switch-row"><input type="checkbox" role="switch" checked=${ov.names} onChange=${(e) => set("names", e.target.checked)} /><span>Names under avatars</span></label>
-      <label class="switch-row"><input type="checkbox" role="switch" checked=${ov.banner} onChange=${(e) => set("banner", e.target.checked)} /><span>RIP / finish banner</span></label>
-      <button class="secondary outline" onClick=${() => saveSettings({ overlay: {} })}>Reset</button>
-    </div>`;
+    <section class="ovgroup">
+      <h4>Horizontal bar <span class="hint-inline"><code>/overlay</code> · avatars along a track line, RIP / boost / finish banner</span></h4>
+      <div class="ovgrid">
+        <${Num} obj=${ov} set=${set} k="size" step="1" label="Avatar size (px)" />
+        <${Num} obj=${ov} set=${set} k="lineHeight" step="1" label="Track line height (px)" />
+        <${Num} obj=${ov} set=${set} k="bottom" step="1" label="Track bottom offset (px)" />
+        <${Num} obj=${ov} set=${set} k="side" step="1" label="Side margin (px, both sources)" />
+        <label>Accent color (both sources)<input type="color" value=${ov.accent} onChange=${(e) => set("accent", e.target.value)} /></label>
+        <label>Track line color<input value=${ov.line} onBlur=${(e) => e.target.value !== ov.line && set("line", e.target.value)} /></label>
+        <label class="switch-row"><input type="checkbox" role="switch" checked=${ov.names} onChange=${(e) => set("names", e.target.checked)} /><span>Names under avatars</span></label>
+        <label class="switch-row"><input type="checkbox" role="switch" checked=${ov.banner} onChange=${(e) => set("banner", e.target.checked)} /><span>RIP / finish banner</span></label>
+        <label class="switch-row"><input type="checkbox" role="switch" checked=${!!ov.showInLobby} onChange=${(e) => set("showInLobby", e.target.checked)} /><span>Show the field in the lobby too (both sources; otherwise only while racing)</span></label>
+      </div>
+    </section>
+    <section class="ovgroup">
+      <h4>Leaderboard <span class="hint-inline"><code>/leaderboard</code> · vertical top-N list, its own browser source</span></h4>
+      <div class="ovgrid">
+        <${Num} obj=${ov} set=${set} k="board" step="1" label="Rows (0 = off)" />
+        <${Num} obj=${ov} set=${set} k="boardScale" label="Size (scale, 1 = 100%)" step="0.1" />
+        <label>Anchor side<select value=${ov.boardSide} onChange=${(e) => set("boardSide", e.target.value)}><option value="left">left</option><option value="right">right</option></select></label>
+        <p class="hint" style=${{ margin: "26px 0 0" }}>Make it smaller here (or with <code>scale=</code> on the link) so the mini map fits above it.</p>
+      </div>
+      <p class="hint" style=${{ margin: "14px 0 6px" }}>Browser source for OBS: the link's params override the saved rows / side / size for that source only.</p>
+      <${LeaderboardLink} ov=${ov} />
+    </section>
+    <div class="btn-row"><button class="secondary outline" onClick=${() => saveSettings({ overlay: {} })}>Reset</button></div>`;
 }
 
 // Unity KeyCode name from a keyboard event, for the key-capture fields.
@@ -275,7 +302,7 @@ export default function Settings() {
 
       <article>
         <header>Overlay look</header>
-        <p class="hint">Applies live to every open <code>/overlay</code> browser source, no refresh. Query params on the URL still override.</p>
+        <p class="hint">Two browser sources: <code>/overlay</code> (the horizontal bar) and <code>/leaderboard</code> (the vertical list), placed separately in OBS. Applies live to every open one, no refresh; query params on a URL still override. Both draw nothing outside a race and fade out when it ends.</p>
         <${OverlayForm} />
       </article>
 

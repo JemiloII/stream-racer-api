@@ -2,6 +2,7 @@ import { test as base, expect, type Page } from "@playwright/test";
 export type { Page };
 import { SKIP_ENV } from "./global-setup";
 import { fetchServerTruth, type ServerTruth } from "./server";
+import { serveWorkingTree } from "./working-tree";
 
 export * from "./server";
 export { expect };
@@ -11,6 +12,8 @@ interface Fixtures {
   server: ServerTruth;
   /** Console errors and uncaught exceptions collected for the test's page; the test fails if any were seen. */
   consoleErrors: string[];
+  /** Serves ui/ from the working tree (pages, .js, .css) so the DLL's embedded copy is not what is tested. SR_UI_LIVE=1 disables it. */
+  workingTreeUi: void;
 }
 
 export const test = base.extend<Fixtures>({
@@ -26,6 +29,14 @@ export const test = base.extend<Fixtures>({
       page.on("pageerror", (error) => errors.push(`uncaught: ${error.message}`));
       await use(errors);
       expect(errors, "the page logged errors or threw").toEqual([]);
+    },
+    { auto: true },
+  ],
+
+  workingTreeUi: [
+    async ({ page, baseURL }, use) => {
+      if (!process.env.SR_UI_LIVE && baseURL) await serveWorkingTree(page, new URL(baseURL).origin);
+      await use();
     },
     { auto: true },
   ],

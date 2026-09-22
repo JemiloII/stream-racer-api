@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { get, put } from '../support/apiClient';
-import type { SettingsDocument } from '../support/apiTypes';
+import { shotKeys, type SettingsDocument } from '../support/apiTypes';
+import { installedFeatures, missingFeatureReason } from '../support/installedFeatures';
 import { readSettings, writeSettings } from '../support/settingsStore';
 
 const requiredSections: (keyof SettingsDocument)[] = [
@@ -67,5 +68,50 @@ describe('PUT /settings', () => {
     expect(attempt.status).toBe(200);
     expect(attempt.json!.config).toEqual(original.config);
     expect((await readSettings()).config).toEqual(original.config);
+  });
+});
+
+describe('newer sections: chat commands, chat replies, follower checks, camera shots', () => {
+  let original: SettingsDocument;
+
+  beforeEach(async (context) => {
+    const features = await installedFeatures();
+    for (const feature of ['camera', 'chatReplies', 'followerChecks'] as const) if (!features.has(feature)) context.skip(missingFeatureReason(feature));
+    original ??= await readSettings();
+  });
+
+  afterAll(async () => {
+    if (original) await writeSettings({ camera: original.camera, respawnCommand: original.respawnCommand });
+  });
+
+  test('chat commands are alias lists ("a|b"), chatReplies a switch, followerChecks a status', async () => {
+    const settings = await readSettings();
+    expect(settings.respawnCommand).toEqual(expect.any(String));
+    expect(settings.colorCommand).toEqual(expect.any(String));
+    expect(settings.chatReplies).toEqual(expect.any(Boolean));
+    expect(['ok', 'no token', 'unknown']).toContain(settings.followerChecks);
+    if (!settings.twitchTokenSet) expect(settings.followerChecks).toBe('no token');
+    expect(settings).toHaveProperty('followerChecksError');
+  });
+
+  test('camera.shots has every director shot, all booleans', async () => {
+    const settings = await readSettings();
+    for (const key of shotKeys) expect(settings.camera.shots[key], `camera.shots.${key}`).toEqual(expect.any(Boolean));
+  });
+
+  test('a partial camera.shots PUT keeps the unmentioned shots on (never off by accident)', async () => {
+    const flipped = !original.camera.shots.sweep;
+    const merged = await writeSettings({ camera: { shots: { sweep: flipped } as SettingsDocument['camera']['shots'] } });
+    expect(merged.camera.shots.sweep).toBe(flipped);
+    for (const key of shotKeys) if (key !== 'sweep') expect(merged.camera.shots[key], `camera.shots.${key}`).toBe(true);
+    const restored = await writeSettings({ camera: original.camera });
+    expect(restored.camera.shots).toEqual(original.camera.shots);
+  });
+
+  test('an empty respawn command falls back to the default aliases', async () => {
+    const cleared = await writeSettings({ respawnCommand: '' });
+    expect(cleared.respawnCommand).toBe('!race respawn|!respawn');
+    const restored = await writeSettings({ respawnCommand: original.respawnCommand });
+    expect(restored.respawnCommand).toBe(original.respawnCommand);
   });
 });

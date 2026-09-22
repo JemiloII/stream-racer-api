@@ -1,8 +1,12 @@
 .grid2 { display: grid; grid-template-columns: minmax(320px, 400px) 1fr; gap: 22px; align-items: start; }
-@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } } /* below this the timing board's action buttons get clipped beside the cards */
 .stack { display: grid; gap: 14px; min-width: 0; }
 .cam-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .cam-row button { flex: 1 1 30%; margin: 0; padding: 10px 6px; white-space: nowrap; }
+.shots { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.shots-head { grid-column: 1 / -1; font: 700 11px/1 var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.shots .switch-row { display: flex; align-items: center; gap: 10px; margin: 0; font: 600 13px var(--display); letter-spacing: .04em; }
+.shots .switch-row input { margin: 0; }
 .hero { width: 100%; margin: 0; padding: 22px 18px; font: 700 26px/1 var(--display); letter-spacing: .12em; background: linear-gradient(180deg, #ffe14a, var(--hazard)); color: #000; border: 0; box-shadow: 0 0 0 1px rgba(255,212,0,.35), 0 10px 30px -12px rgba(255,212,0,.6); position: relative; overflow: hidden; }
 .hero::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, transparent 0 12px, rgba(0,0,0,.05) 12px 24px); pointer-events: none; }
 .hero:active { transform: translateY(1px); }

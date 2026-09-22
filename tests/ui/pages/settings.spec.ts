@@ -74,4 +74,37 @@ test.describe("Settings page", () => {
     const token = card(page, /^API token$/);
     await expect(token.locator("p.hint").first()).toContainText(server.settings.config.tokenRequired ? "A token is required" : "No token set");
   });
+
+  test("Overlay look is split into a Horizontal bar group and a Leaderboard group that mirror settings.overlay", async ({ page, server }) => {
+    const overlay = card(page, /^Overlay look$/);
+    const groups = overlay.locator(".ovgroup");
+    await expect(groups.locator("h4")).toContainText(["Horizontal bar", "Leaderboard"]);
+    const { overlay: saved = {} } = server.settings;
+
+    const bar = groups.nth(0);
+    await expect(bar.getByLabel("Avatar size (px)")).toBeVisible();
+    await expect(bar.getByRole("switch", { name: /^Names under avatars/ })).toBeChecked({ checked: saved.names !== false });
+    await expect(bar.getByRole("switch", { name: /^Show the field in the lobby too/ })).toBeChecked({ checked: !!saved.showInLobby });
+    await expect(bar.getByText(/Leaderboard rows/)).toHaveCount(0); // the list has its own group now
+
+    const board = groups.nth(1);
+    await expect(board.getByLabel("Rows (0 = off)")).toHaveValue(String(saved.board ?? 10));
+    await expect(board.getByLabel("Size (scale, 1 = 100%)")).toHaveValue(String(saved.boardScale ?? 1));
+    await expect(board.getByLabel("Anchor side")).toHaveValue(saved.boardSide ?? "left");
+    await expect(board.locator("p.hint").first()).toContainText("mini map fits above it");
+  });
+
+  test("leaderboard link builder produces a /leaderboard URL with rows, side and scale (local state only)", async ({ page, server }) => {
+    const { overlay: saved = {} } = server.settings;
+    const builder = card(page, /^Overlay look$/).locator(".lblink");
+    const link = builder.locator("input[readonly]");
+    await expect(link).toHaveValue(`${new URL(page.url()).origin}/leaderboard?rows=${saved.board ?? 10}&side=${saved.boardSide ?? "left"}&scale=${saved.boardScale ?? 1}`);
+    await builder.getByLabel("Rows").fill("5");
+    await expect(link).toHaveValue(/\/leaderboard\?rows=5&/);
+    await builder.getByLabel("Side").selectOption("right");
+    await expect(link).toHaveValue(/&side=right&/);
+    await builder.getByLabel("Scale").fill("0.6");
+    await expect(link).toHaveValue(/&scale=0\.6$/);
+    await expect(builder.getByRole("button", { name: "Copy link" })).toBeVisible();
+  });
 });

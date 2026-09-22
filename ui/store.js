@@ -61,7 +61,7 @@ export const useStore = create((set, get) => ({
   loadSettings: async () => { const s = await api("/settings", { method: "GET" }); if (s) set({ settings: { ...s, ui: { ...DEFAULT_UI, ...s.ui } } }); },
   saveSettings: async (patch) => {
     const next = { ...get().settings, ...patch };
-    const s = await api("/settings", { method: "PUT", body: { autoJoinStreamer: next.autoJoinStreamer, streamerColor: next.streamerColor, autoJoin: next.autoJoin, ui: next.ui, bots: next.bots, customBots: next.customBots, overlay: next.overlay, minimap: next.minimap, colorLeaderboard: next.colorLeaderboard, colorCommandEnabled: next.colorCommandEnabled, colorCommand: next.colorCommand, respawnCommandEnabled: next.respawnCommandEnabled, respawnCommand: next.respawnCommand, colors: next.colors, perks: next.perks, twitchToken: next.twitchToken, twitchClientId: next.twitchClientId, botOptions: next.botOptions, webhooks: next.webhooks } });
+    const s = await api("/settings", { method: "PUT", body: { autoJoinStreamer: next.autoJoinStreamer, streamerColor: next.streamerColor, autoJoin: next.autoJoin, ui: next.ui, bots: next.bots, customBots: next.customBots, overlay: next.overlay, minimap: next.minimap, camera: next.camera, colorLeaderboard: next.colorLeaderboard, colorCommandEnabled: next.colorCommandEnabled, colorCommand: next.colorCommand, respawnCommandEnabled: next.respawnCommandEnabled, respawnCommand: next.respawnCommand, colors: next.colors, perks: next.perks, twitchToken: next.twitchToken, twitchClientId: next.twitchClientId, botOptions: next.botOptions, webhooks: next.webhooks } });
     if (s) set({ settings: { ...s, ui: { ...DEFAULT_UI, ...s.ui } } });
   },
 
@@ -72,6 +72,18 @@ export const useStore = create((set, get) => ({
       es.addEventListener(ev, (e) => set({ snap: JSON.parse(e.data), online: true }));
     es.addEventListener("joined", get().refresh);
     es.addEventListener("finisher", get().refresh);
+    // Boost pools change between the 4 Hz snapshots (a !boost, a perk, /boost/:x/add): patch the count straight away.
+    // The next `positions` snapshot replaces the whole field and stays the truth.
+    const patchBoosts = (e) => {
+      const { login, boosts } = JSON.parse(e.data);
+      if (typeof boosts !== "number" || !login) return;
+      set((state) => ({
+        snap: { ...state.snap, vehicles: state.snap.vehicles.map((v) => (v.login === login ? { ...v, boosts } : v)) },
+        me: login === state.snap.streamer ? { ...state.me, boosts } : state.me,
+      }));
+    };
+    es.addEventListener("boost", patchBoosts);
+    es.addEventListener("boosts", patchBoosts);
     es.addEventListener("camera", (e) => set({ camera: JSON.parse(e.data) }));
     es.addEventListener("screen", () => { get().refresh(); get().loadMe(); });
     es.addEventListener("settings", (e) => { const s = JSON.parse(e.data); set({ settings: { ...s, ui: { ...DEFAULT_UI, ...s.ui } } }); });

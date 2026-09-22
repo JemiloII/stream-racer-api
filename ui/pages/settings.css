@@ -38,10 +38,16 @@
 .hooks > button { margin: 0; width: max-content; }
 @media (max-width: 1000px) { .hook { grid-template-columns: auto 1fr 1fr auto; } }
 
+.ovgroup { padding: 12px 0 14px; border-top: 1px solid var(--line); }
+.ovgroup:first-of-type { padding-top: 0; border-top: 0; }
+.ovgroup h4 { margin: 0 0 10px; font: 700 12px/1 var(--display); letter-spacing: .18em; text-transform: uppercase; color: #eef0f2; }
+.ovgroup h4 .hint-inline code { font-size: 12px; padding: 1px 4px; }
 .mmlink { display: grid; grid-template-columns: 120px auto auto 1fr auto; gap: 10px; align-items: center; }
+.mmlink.lblink { grid-template-columns: 80px 100px 80px 1fr auto; }
+.mmlink.lblink label input[type=number], .mmlink.lblink label select { height: 34px; margin: 3px 0 0; padding: 0 8px; font: 500 13px var(--display); }
 .mmlink label { margin: 0; font-size: 12px; color: var(--dim); }
 .mmlink select, .mmlink input[readonly] { height: 34px; margin: 0; padding: 0 8px; font: 500 13px var(--display); letter-spacing: 0; text-transform: none; }
 .mmlink label:first-child select { margin-top: 3px; }
 .mmlink input[readonly] { color: var(--hazard); }
 .mmlink button { margin: 0; height: 34px; white-space: nowrap; }
-@media (max-width: 900px) { .mmlink { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 900px) { .mmlink, .mmlink.lblink { grid-template-columns: 1fr 1fr; } }

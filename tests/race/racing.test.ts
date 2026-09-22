@@ -1,7 +1,7 @@
 // Race story, part 2: start the race and exercise everything that only works while cars are driving.
 import { beforeAll, describe, expect, test } from 'vitest';
 import { get, post } from '../support/apiClient';
-import type { Affected, ApiError, BoostUseResult, PosFrame, RaceSnapshot, TrackResponse, ZonesResponse } from '../support/apiTypes';
+import type { Affected, ApiError, BoostsEvent, BoostUseResult, PerkEvent, PerksInfo, PosFrame, RaceSnapshot, TrackResponse, Vehicle, ZonesResponse } from '../support/apiTypes';
 import { collectEvents, waitForEvent } from '../support/eventStream';
 import { gameProbe } from '../support/gameOnline';
 import { waitForScreen } from '../support/gameScreen';
@@ -17,13 +17,34 @@ describe('racing', () => {
     if (fieldSize === 0) throw new Error('the lobby is empty: lobby.test.ts must have joined the test cars first');
   });
 
-  test('POST /race/start?now=1 starts immediately and race_start fires', async () => {
+  test('POST /race/start?now=1 starts immediately and race_start fires, followed by one boosts event per car', async () => {
     const raceStart = waitForEvent<RaceSnapshot>('race_start', 30_000);
+    const pools = collectEvents<BoostsEvent>({ durationMs: 5000, events: ['boosts'] });
     const response = await post<Affected>('/race/start?now=1');
     expect(response.status, response.text).toBe(200);
     expect(response.json!.affected).toBe(1);
     expect(await raceStart, 'no race_start event within 30 s').not.toBeNull();
     expect(await waitForScreen('racing', 30)).toBe('racing');
+    const resets = (await pools).map((event) => event.data);
+    for (const login of testBotLogins) {
+      const reset = resets.find((event) => event.login === login);
+      expect(reset, `boosts event for ${login} at race start`).toBeDefined();
+      expect(reset!.boosts).toEqual(expect.any(Number));
+      expect(reset!.delta).toBe(0);
+    }
+  });
+
+  test('GET /perks/:login for a car in the race: test bots are nobody special, so 0 extra boosts and a reason', async () => {
+    const perks = (await get<PerksInfo>('/perks/sr_test_a')).json!;
+    expect(perks.inRace).toBe(true);
+    expect(perks.granted, 'GrantPerks ran for the car (after the backend title arrived)').toBe(true);
+    expect(perks.subscriber).toBe(false);
+    expect(perks.host).toBe(false);
+    expect(perks.boosts).toEqual(expect.any(Number));
+    if (!perks.follower) {
+      expect(perks.extraBoosts).toBe(0);
+      expect(perks.why.length).toBeGreaterThan(0);
+    }
   });
 
   test('pos frames stream at the configured rate as [login, x, z, pct, place, finished, state]', async () => {
@@ -94,14 +115,19 @@ describe('racing', () => {
     }
   });
 
-  test('POST /boost/:login/use spends the pool one by one and is 409 once it is empty', async () => {
+  test('POST /boost/:login/use spends the pool one by one, each spend fires a boost event with boosts left, and is 409 once empty', async () => {
     await waitUntilDriving('sr_test_a');
     const startingBoosts = vehicleOf(await raceSnapshot(), 'sr_test_a').boosts;
     expect(startingBoosts, 'a fresh car has boosts to spend').toBeGreaterThan(0);
+    const boostEvent = waitForEvent<Vehicle>('boost', 5000);
     const firstUse = await post<BoostUseResult>('/boost/sr_test_a/use');
     expect(firstUse.status, firstUse.text).toBe(200);
     expect(firstUse.json!.affected).toBe(1);
     expect(firstUse.json!.boosts).toBe(startingBoosts - 1);
+    const spent = await boostEvent;
+    expect(spent, 'no boost event for the pool spend').not.toBeNull();
+    expect(spent!.data.login).toBe('sr_test_a');
+    expect(spent!.data.boosts, 'the boost event carries the pool after the spend').toBe(startingBoosts - 1);
 
     let remaining = firstUse.json!.boosts;
     while (remaining > 0) {
@@ -116,11 +142,35 @@ describe('racing', () => {
     expect(emptyPool.json!.boosts).toBe(0);
   });
 
-  test('POST /boost/:login/add?n=2 refills the pool', async () => {
-    const response = await post<Affected>('/boost/sr_test_a/add?n=2');
+  test('POST /boost/:login/add?n=2 refills the pool, answers the new count and fires a boosts event', async () => {
+    const poolEvent = waitForEvent<BoostsEvent>('boosts', 5000);
+    const response = await post<BoostUseResult>('/boost/sr_test_a/add?n=2');
     expect(response.status).toBe(200);
     expect(response.json!.affected).toBe(1);
+    expect(response.json!.boosts).toBe(2);
     expect(vehicleOf(await raceSnapshot(), 'sr_test_a').boosts).toBe(2);
+    const added = await poolEvent;
+    expect(added, 'no boosts event for the add').not.toBeNull();
+    expect(added!.data.login).toBe('sr_test_a');
+    expect(added!.data.boosts).toBe(2);
+    expect(added!.data.delta).toBe(2);
+  });
+
+  test('POST /boost/all/add?n=1 tops up every car (affected = field size)', async () => {
+    const before = Object.fromEntries((await raceSnapshot()).vehicles.map((vehicle) => [vehicle.login, vehicle.boosts]));
+    const response = await post<Affected>('/boost/all/add?n=1');
+    expect(response.status).toBe(200);
+    expect(response.json!.affected).toBe(testBots.length);
+    for (const vehicle of (await raceSnapshot()).vehicles) expect(vehicle.boosts, vehicle.login).toBe(before[vehicle.login]! + 1);
+  });
+
+  test('perk events (if any arrived this race) say why and whether follower checks could run', async () => {
+    const perks = await collectEvents<PerkEvent>({ durationMs: 500, events: ['perk'] });
+    for (const event of perks) {
+      expect(event.data.extraBoosts).toEqual(expect.any(Number));
+      expect(Array.isArray(event.data.reasons)).toBe(true);
+      expect(['ok', 'no token', 'unknown']).toContain(event.data.followerChecks);
+    }
   });
 
   test('POST /boost/:login fires a free boost without touching the pool', async () => {
