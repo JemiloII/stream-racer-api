@@ -3,7 +3,7 @@ import { get } from '../support/apiClient';
 import type { ApiError, PerksInfo, SettingsDocument } from '../support/apiTypes';
 import { installedFeatures, missingFeatureReason } from '../support/installedFeatures';
 
-const followerStatuses = ['ok', 'no token', 'unknown'];
+const followerStatuses = ['ok', 'no token', 'unknown', 'bot'];
 
 // A login that is not in any race and not on Twitch: the answer is about the settings, not the person.
 const nobody = 'sr_api_test_nobody';
@@ -27,7 +27,7 @@ describe('GET /perks/:login', () => {
     expect(Array.isArray(perks.why)).toBe(true);
     for (const reason of perks.why) expect(reason).toEqual(expect.any(String));
     expect(followerStatuses).toContain(perks.followerChecks);
-    expect(perks.granted).toBe(false);
+    expect(perks.granted).toBe(0);
     expect(perks.boosts).toBeNull();
     expect(perks.perks).toHaveProperty('boostFollower');
   });
@@ -36,7 +36,7 @@ describe('GET /perks/:login', () => {
     const settings = (await get<SettingsDocument>('/settings')).json!;
     const perks = (await get<PerksInfo>(`/perks/${nobody}`)).json!;
     expect(perks.followerChecks).toBe(settings.followerChecks);
-    if (!settings.twitchTokenSet || !settings.twitchClientId) {
+    if ((!settings.twitchTokenSet || !settings.twitchClientId) && settings.followerChecks !== 'bot') {
       expect(perks.followerChecks).toBe('no token');
       if (settings.perks.boostFollower !== 0) expect(perks.why.join(' ')).toMatch(/token/);
     }

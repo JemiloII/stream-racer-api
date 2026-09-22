@@ -99,6 +99,21 @@ static class Routes
             if (inventory == null) { status = 404; return new { error = "no vehicle", target }; }
             return inventory;
         }
+        if (root == "tier")
+        {
+            if (method == "DELETE" && string.IsNullOrEmpty(target)) { Game.ForgetExternalTiers(); return Ok(1); }
+            if (string.IsNullOrEmpty(target)) { status = 400; return new { error = "need /tier/:login" }; }
+            if (method == "GET") { var tier = Game.ExternalTierOf(target); if (tier == null) { status = 404; return new { error = "no tier pushed for this login", login = target.ToLowerInvariant() }; } return new { login = target.ToLowerInvariant(), tier.follower, tier.subscriber, tier.source, at = tier.at }; }
+            if (method == "PUT" || method == "POST")
+            {
+                var tierBody = string.IsNullOrWhiteSpace(body) ? new JObject() : JObject.Parse(body);
+                bool? follower = tierBody["follower"]?.Type == JTokenType.Boolean ? (bool?)tierBody["follower"] : null;
+                bool? subscriber = tierBody["subscriber"]?.Type == JTokenType.Boolean ? (bool?)tierBody["subscriber"] : null;
+                if (follower == null && subscriber == null) { status = 400; return new { error = "need {follower?: bool, subscriber?: bool}" }; }
+                return Game.SetExternalTier(target, follower, subscriber, (string)tierBody["source"]);
+            }
+            if (method == "DELETE") { Game.ForgetExternalTiers(); return Ok(1); }
+        }
         if (method == "GET" && root == "perks") { if (string.IsNullOrEmpty(target)) { status = 400; return new { error = "need /perks/:login" }; } return Game.PerksDto(target); }
         if (method == "GET" && root == "chat") return Game.ChatStatus();
         if (method == "GET" && root == "settings") return Settings.WithConfig();

@@ -80,7 +80,7 @@ export interface CameraState {
   shots: Record<ShotKey, boolean>;
 }
 
-export type FollowerChecks = 'ok' | 'no token' | 'unknown';
+export type FollowerChecks = 'ok' | 'no token' | 'unknown' | 'bot';
 
 /** GET /perks/:login */
 export interface PerksInfo {
@@ -95,7 +95,8 @@ export interface PerksInfo {
   why: string[];
   followerChecks: FollowerChecks;
   followerChecksError: string | null;
-  granted: boolean;
+  granted: number;
+  source?: string | null;
   boosts: number | null;
   perks: Perks;
 }

@@ -7,7 +7,28 @@ namespace StreamRacerApi;
 
 static partial class Game
 {
-    public static bool IsSub(Vehicle vehicle) => vehicle.Profile().IsSubscriber();
+    // Tiers pushed by an outside bot (voisona-bot) that holds the Twitch scopes the game lacks: PUT /tier/:login.
+    // They win over the game's own flag / the mod's Helix lookup, and a grant is re-run so the extra boosts land.
+    public class ExternalTier { public bool? follower, subscriber; public string source; public System.DateTime at; }
+    static readonly Dictionary<string, ExternalTier> _externalTiers = new();
+    public static ExternalTier ExternalTierOf(string login) => login != null && _externalTiers.TryGetValue(login.ToLowerInvariant(), out var tier) ? tier : null;
+    public static bool AnyExternalTiers => _externalTiers.Count > 0;
+    public static object SetExternalTier(string login, bool? follower, bool? subscriber, string source)
+    {
+        login = (login ?? "").ToLowerInvariant();
+        var tier = ExternalTierOf(login) ?? new ExternalTier();
+        if (follower != null) tier.follower = follower;
+        if (subscriber != null) tier.subscriber = subscriber;
+        tier.source = source ?? "bot"; tier.at = System.DateTime.UtcNow;
+        _externalTiers[login] = tier;
+        var vehicle = Find(login);
+        if (vehicle != null) GrantPerks(vehicle); // idempotent: only the difference is added
+        Plugin.Emit("tier", new { login, tier.follower, tier.subscriber, tier.source, inRace = vehicle != null });
+        return new { login, tier.follower, tier.subscriber, tier.source, inRace = vehicle != null, granted = vehicle != null ? GrantedExtra(vehicle) : 0 };
+    }
+    public static void ForgetExternalTiers() => _externalTiers.Clear();
+
+    public static bool IsSub(Vehicle vehicle) => ExternalTierOf(Login(vehicle))?.subscriber ?? vehicle.Profile().IsSubscriber();
     public static bool IsDev(Vehicle vehicle) => (Title(vehicle) ?? "").IndexOf("developer", System.StringComparison.OrdinalIgnoreCase) >= 0;
     public static bool IsHost(Vehicle vehicle) => Login(vehicle) != null && Login(vehicle) == StreamerLogin;
 
@@ -18,9 +39,9 @@ static partial class Game
     static readonly Dictionary<string, List<System.Action<bool>>> _followPending = new(); // login -> callbacks waiting on one lookup
     public static string FollowerCheckError; // last Helix failure, shown in /settings and /perks/:login
     public static bool FollowerKnown(string login) => _followers.ContainsKey((login ?? "").ToLowerInvariant());
-    public static bool IsFollower(string login) => login != null && _followers.TryGetValue(login.ToLowerInvariant(), out var follows) && follows;
+    public static bool IsFollower(string login) => ExternalTierOf(login)?.follower ?? (login != null && _followers.TryGetValue(login.ToLowerInvariant(), out var follows) && follows);
     public static bool FollowerChecksAvailable => !string.IsNullOrEmpty(Settings.Current.twitchToken) && !string.IsNullOrEmpty(Settings.Current.twitchClientId) && !string.IsNullOrEmpty(StreamerId);
-    public static string FollowerChecks => Pure.FollowerCheckStatus(!string.IsNullOrEmpty(Settings.Current.twitchToken), !string.IsNullOrEmpty(Settings.Current.twitchClientId), !string.IsNullOrEmpty(StreamerId), FollowerCheckError);
+    public static string FollowerChecks => AnyExternalTiers ? "bot" : Pure.FollowerCheckStatus(!string.IsNullOrEmpty(Settings.Current.twitchToken), !string.IsNullOrEmpty(Settings.Current.twitchClientId), !string.IsNullOrEmpty(StreamerId), FollowerCheckError);
     public static void ForgetFollowers() { _followers.Clear(); FollowerCheckError = null; }
 
     public static void CheckFollower(string login, string userId, System.Action<bool> then = null)
@@ -74,21 +95,26 @@ static partial class Game
 
     // Extra boosts on join: follower + subscriber + developer + host, stacking (Pure.ExtraBoosts). Runs once the backend
     // title is in. Sub/dev/host are known at once; the follower part waits for the Helix lookup, then the whole grant applies.
-    static readonly HashSet<Vehicle> _perked = new();
-    public static void ForgetPerks() => _perked.Clear();
+    static readonly Dictionary<Vehicle, int> _granted = new(); // extra boosts already handed to this car this race
+    public static void ForgetPerks() => _granted.Clear();
+    public static int GrantedExtra(Vehicle vehicle) => _granted.TryGetValue(vehicle, out var extra) ? extra : 0;
+    // Idempotent: works out what the car should have and adds only what it hasn't got yet, so a tier that arrives
+    // later (the bot's PUT /tier, a follower lookup finishing) tops the pool up instead of double-granting.
     public static void GrantPerks(Vehicle vehicle)
     {
-        if (vehicle == null || _perked.Contains(vehicle)) return;
-        _perked.Add(vehicle);
+        if (vehicle == null) return;
         var perks = Settings.Current.perks;
         void Apply()
         {
             if (!Vehicles().Contains(vehicle)) return;
             var (extra, reasons) = Pure.ExtraBoosts(perks.boostFollower, perks.boostSubscriber, perks.boostDeveloper, perks.boostHost, IsFollower(Login(vehicle)), IsSub(vehicle), IsDev(vehicle), IsHost(vehicle));
-            if (extra != 0) AddBoosts(vehicle, extra);
-            Plugin.Emit("perk", new { login = Login(vehicle), displayName = DisplayName(vehicle), extraBoosts = extra, reasons, boosts = Boosts(vehicle), followerChecks = FollowerChecks, follower = IsFollower(Login(vehicle)) });
+            int already = GrantedExtra(vehicle), delta = extra - already;
+            if (delta > 0) { AddBoosts(vehicle, delta); _granted[vehicle] = extra; }
+            else if (!_granted.ContainsKey(vehicle)) _granted[vehicle] = 0;
+            if (delta > 0 || already == 0) Plugin.Emit("perk", new { login = Login(vehicle), displayName = DisplayName(vehicle), extraBoosts = extra, added = System.Math.Max(0, delta), reasons, boosts = Boosts(vehicle), followerChecks = FollowerChecks, follower = IsFollower(Login(vehicle)) });
         }
-        if (perks.boostFollower != 0 && FollowerChecksAvailable && !FollowerKnown(Login(vehicle))) CheckFollower(Login(vehicle), vehicle.Profile().TwitchId(), _ => Apply());
+        bool tierKnown = ExternalTierOf(Login(vehicle))?.follower != null;
+        if (!tierKnown && perks.boostFollower != 0 && FollowerChecksAvailable && !FollowerKnown(Login(vehicle))) CheckFollower(Login(vehicle), vehicle.Profile().TwitchId(), _ => Apply());
         else Apply();
     }
 
@@ -98,6 +124,7 @@ static partial class Game
         login = (login ?? "").ToLowerInvariant();
         var vehicle = Find(login); var perks = Settings.Current.perks;
         bool subscriber = vehicle != null && IsSub(vehicle), developer = vehicle != null && IsDev(vehicle), host = login == (StreamerLogin ?? "").ToLowerInvariant();
+        var external = ExternalTierOf(login);
         if (perks.boostFollower != 0 && FollowerChecksAvailable && !FollowerKnown(login)) CheckFollower(login, vehicle?.Profile().TwitchId());
         var (extra, why) = Pure.ExtraBoosts(perks.boostFollower, perks.boostSubscriber, perks.boostDeveloper, perks.boostHost, IsFollower(login), subscriber, developer, host);
         string status = FollowerChecks;
@@ -110,7 +137,7 @@ static partial class Game
         {
             login, inRace = vehicle != null, follower = IsFollower(login), followerKnown = FollowerKnown(login), subscriber, developer, host,
             extraBoosts = extra, why, followerChecks = status, followerChecksError = FollowerCheckError,
-            granted = vehicle != null && _perked.Contains(vehicle), boosts = vehicle != null ? (int?)Boosts(vehicle) : null, perks,
+            granted = vehicle != null ? GrantedExtra(vehicle) : 0, source = external?.source, boosts = vehicle != null ? (int?)Boosts(vehicle) : null, perks,
         };
     }
 }
