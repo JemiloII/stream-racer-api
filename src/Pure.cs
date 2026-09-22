@@ -72,6 +72,10 @@ public static class Pure
         return Palette[(int)(h % (uint)Palette.Length)];
     }
 
+    // ---- respawns ----
+    // limit 0 = unlimited (-1); otherwise what's left, never below 0
+    public static int RespawnsLeft(int limit, int used) => limit <= 0 ? -1 : Math.Max(0, limit - used);
+
     // ---- chat ----
     // "!race color red" with command "!race color" -> "red"; null when it isn't that command.
     public static string CommandArg(string message, string command)

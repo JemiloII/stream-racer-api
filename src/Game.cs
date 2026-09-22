@@ -207,6 +207,7 @@ static class Game
         pct = v.NIKOEDJIAFB ? 100f : Mathf.Clamp(v.MNHJMCLOGPB / Mathf.Max(1f, FinishAt(v)) * 100f, 0f, 100f),
         finished = v.NIKOEDJIAFB,
         boosts = Boosts(v),
+        respawns = RespawnsLeft(Login(v)),
         state = VehicleState(v),
         image = Images.TryGetValue(v.JDDOIMHIFHK.JLDPKDLFPJP ?? "", out var img) ? img : null,
         avatar = Avatar(v),
@@ -784,7 +785,9 @@ static class Game
         login = login.ToLowerInvariant(); displayName = string.IsNullOrEmpty(displayName) ? login : displayName;
         if (Settings.Current.respawnCommandEnabled && Pure.CommandArg(message, Settings.RespawnCommands) == "")
         {
-            var mine = Find(login); if (mine != null) Respawn(mine); // Respawn emits the respawn event itself
+            var mine = Find(login); if (mine == null) return;
+            if (RespawnsLeft(login) == 0) { Plugin.Emit("denied", new { login, displayName, command = "respawn", reason = "no respawns left", respawns = 0 }); return; }
+            if (Respawn(mine)) _respawnsUsed[login] = (_respawnsUsed.TryGetValue(login, out var used) ? used : 0) + 1; // Respawn emits the respawn event itself
             return;
         }
         if (!Settings.Current.colorCommandEnabled) return;
@@ -820,7 +823,16 @@ static class Game
         return true;
     }
 
-    public static void ResetBoomTracking() { BoomedUntil.Clear(); Slows.Clear(); }
+    public static void ResetBoomTracking() { BoomedUntil.Clear(); Slows.Clear(); _respawnsUsed.Clear(); }
+
+    // ---- respawn pool: chat respawns per racer per race; API respawns (the streamer) are free ----
+    static readonly Dictionary<string, int> _respawnsUsed = new();
+    public static int RespawnsLeft(string login) => Pure.RespawnsLeft(Settings.Current.respawnLimit, login != null && _respawnsUsed.TryGetValue(login.ToLowerInvariant(), out var used) ? used : 0);
+    public static object InventoryDto(string login)
+    {
+        var v = Find(login); if (v == null) return null;
+        return new { login = Login(v), displayName = v.JDDOIMHIFHK.AMCIKHEHBGM, boosts = Boosts(v), respawns = RespawnsLeft(Login(v)), respawnLimit = Settings.Current.respawnLimit, running = Running };
+    }
 
     // Lobby creation = what the map list's green play button does: put a playlist into the game's
     // static queue (first = chosen map) and call its "next map in queue", which builds the lobby

@@ -267,7 +267,8 @@ export default function Settings() {
         </label>
         <div class="ovgrid">
           <label>Respawn command<input key=${settings.respawnCommand || ""} defaultValue=${settings.respawnCommand || "!race respawn|!respawn"} onBlur=${(e) => e.target.value.trim() !== (settings.respawnCommand || "!race respawn") && saveSettings({ respawnCommand: e.target.value.trim() || "!race respawn|!respawn" })} /></label>
-          <p class="hint" style=${{ margin: "26px 0 0" }}>The game's stuck-car reset, for the racer who typed it. Only during a race.</p>
+          <label>Respawns per racer per race (0 = unlimited)<input type="number" min="0" step="1" key=${settings.respawnLimit ?? ""} defaultValue=${settings.respawnLimit ?? 2} onBlur=${(e) => +e.target.value !== (settings.respawnLimit ?? 2) && saveSettings({ respawnLimit: Math.max(0, +e.target.value || 0) })} /></label>
+          <p class="hint" style=${{ gridColumn: "1 / -1", margin: 0 }}>The game's stuck-car reset, for the racer who typed it. Only during a race. Your own respawns from the Controls page are not counted. <code>!race inv</code> (through the bot) tells a viewer what they have left.</p>
         </div>
       </article>
 

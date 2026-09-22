@@ -204,6 +204,7 @@ export interface SettingsDocument {
   colorCommand: string;
   respawnCommandEnabled: boolean;
   respawnCommand: string;
+  respawnLimit: number;
   colors: Record<string, string>;
   perks: Perks;
   botOptions: Record<string, { autoBoost: boolean }>;

@@ -80,6 +80,7 @@ static class Routes
                          latest = Updates.Latest, upToDate = Updates.UpToDate, updateUrl = Updates.Url, developer = "Shibiko", twitch = "https://twitch.tv/ShibikoX" };
         }
         if (method == "GET" && root == "me") return new { id = Game.StreamerId, login = Game.StreamerLogin, inRace = Game.StreamerVehicle() != null };
+        if (method == "GET" && root == "inventory") { if (string.IsNullOrEmpty(x)) { status = 400; return new { error = "need /inventory/:login" }; } var inv = Game.InventoryDto(x); if (inv == null) { status = 404; return new { error = "no vehicle", target = x }; } return inv; }
         if (method == "GET" && root == "perks") { if (string.IsNullOrEmpty(x)) { status = 400; return new { error = "need /perks/:login" }; } return Game.PerksDto(x); }
         if (method == "GET" && root == "chat") return Game.ChatStatus();
         if (method == "GET" && root == "settings") return Settings.WithConfig();

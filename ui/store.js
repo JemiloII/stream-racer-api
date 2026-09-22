@@ -61,7 +61,7 @@ export const useStore = create((set, get) => ({
   loadSettings: async () => { const s = await api("/settings", { method: "GET" }); if (s) set({ settings: { ...s, ui: { ...DEFAULT_UI, ...s.ui } } }); },
   saveSettings: async (patch) => {
     const next = { ...get().settings, ...patch };
-    const s = await api("/settings", { method: "PUT", body: { autoJoinStreamer: next.autoJoinStreamer, streamerColor: next.streamerColor, autoJoin: next.autoJoin, ui: next.ui, bots: next.bots, customBots: next.customBots, overlay: next.overlay, minimap: next.minimap, camera: next.camera, colorLeaderboard: next.colorLeaderboard, colorCommandEnabled: next.colorCommandEnabled, colorCommand: next.colorCommand, respawnCommandEnabled: next.respawnCommandEnabled, respawnCommand: next.respawnCommand, colors: next.colors, perks: next.perks, twitchToken: next.twitchToken, twitchClientId: next.twitchClientId, botOptions: next.botOptions, webhooks: next.webhooks } });
+    const s = await api("/settings", { method: "PUT", body: { autoJoinStreamer: next.autoJoinStreamer, streamerColor: next.streamerColor, autoJoin: next.autoJoin, ui: next.ui, bots: next.bots, customBots: next.customBots, overlay: next.overlay, minimap: next.minimap, camera: next.camera, colorLeaderboard: next.colorLeaderboard, colorCommandEnabled: next.colorCommandEnabled, colorCommand: next.colorCommand, respawnCommandEnabled: next.respawnCommandEnabled, respawnLimit: next.respawnLimit, respawnCommand: next.respawnCommand, colors: next.colors, perks: next.perks, twitchToken: next.twitchToken, twitchClientId: next.twitchClientId, botOptions: next.botOptions, webhooks: next.webhooks } });
     if (s) set({ settings: { ...s, ui: { ...DEFAULT_UI, ...s.ui } } });
   },
 

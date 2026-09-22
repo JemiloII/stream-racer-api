@@ -88,6 +88,7 @@ Works as an OBS custom browser dock. Pages and the overlays reconnect on their o
 | `POST /join` | body `{id,login,displayName,color,sub,image}` or array. Lobby only. Non-Twitch names work (bots). `image` (URL or local path) replaces the avatar in the lobby/results lists. |
 | `POST /join/me?color=` | add the streamer's own car (= JOIN GAME button); color defaults to the saved "my car color"; lobby only |
 | `POST /color/:x?color=` | set a racer's color (hex or name), remembered for future joins and shown on the car, the lobby row and the leaderboard; viewers can use any alias in `settings.colorCommand` (default `!race color\|!color`), confirmed in chat when `settings.chatReplies` is on |
+| `GET /inventory/:login` | `{boosts, respawns, respawnLimit}` for a racer (`!race inv` in chat via the bot) |
 | `GET /perks/:login` | `{login, follower, subscriber, developer, host, extraBoosts, why[], followerChecks: ok\|no token\|unknown, followerChecksError, granted, boosts}`: why someone did or didn't get extra boosts. `no token` = paste a Twitch token with `moderator:read:followers` + its client id on Settings → Perks |
 | `GET /chat` | `{connected, channel, replies, canSend, scopes}`: whether the mod can talk in chat through the game's connection (`canSend` = the game token has `chat:edit`; null until looked up) |
 | `POST /chat/say?text=` | say a line in Twitch chat as the streamer (409 when chat is not connected); emits `chat` |
