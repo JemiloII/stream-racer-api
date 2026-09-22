@@ -211,6 +211,7 @@ export interface SettingsDocument {
   webhooks: Webhook[];
   twitchClientId: string;
   twitchTokenSet: boolean;
+  twitch?: { connected: boolean; login: string; scopes: string[]; features: { followerChecks: boolean; chatReplies: boolean }; missing: string[] };
   /** Why follower perks may not apply: ok | no token | unknown (token set but the last Helix lookup failed). */
   followerChecks: FollowerChecks;
   followerChecksError: string | null;

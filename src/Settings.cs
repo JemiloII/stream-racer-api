@@ -51,6 +51,8 @@ static class Settings
         public Perks perks = new();
         public string twitchToken = "";    // optional: a token with moderator:read:followers (from your overlay/bot app) for follower checks
         public string twitchClientId = ""; // the client id that token belongs to
+        public string twitchLogin = "", twitchUserId = ""; // who the mod's token belongs to (set by /twitch/auth)
+        public List<string> twitchScopes = new();          // its scopes (moderator:read:followers, user:write:chat, …)
         public JObject overlay = new(); // look & feel of /overlay (size, board rows, colors, ...)
         public JObject minimap = new(); // in-game picture-in-picture map (enabled, x, y, w, h, marker, bg, ...)
     }
@@ -98,6 +100,8 @@ static class Settings
         var m = JsonConvert.DeserializeObject<Model>(JsonConvert.SerializeObject(Current)) ?? new Model();
         JsonConvert.PopulateObject(string.IsNullOrWhiteSpace(json) ? "{}" : json, m, new JsonSerializerSettings { ObjectCreationHandling = ObjectCreationHandling.Replace, NullValueHandling = NullValueHandling.Include });
         if (m.twitchToken == null) m.twitchToken = Current.twitchToken; // the page never sends the token back; keep it
+        m.twitchLogin ??= Current.twitchLogin; m.twitchUserId ??= Current.twitchUserId; m.twitchScopes ??= Current.twitchScopes ?? new List<string>();
+        if (m.twitchToken != Current.twitchToken && m.twitchToken == "") { m.twitchLogin = ""; m.twitchUserId = ""; m.twitchScopes = new List<string>(); }
         m.autoJoin = (m.autoJoin ?? new()).Where(e => !string.IsNullOrWhiteSpace(e.login)).ToList();
         m.ui ??= new JObject();
         m.overlay ??= new JObject();
@@ -122,7 +126,7 @@ static class Settings
     public static object WithConfig() => new
     {
         Current.autoJoinStreamer, Current.streamerColor, Current.autoJoin, Current.customBots,
-        Current.colorLeaderboard, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.respawnLimit, Current.chatReplies, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken),
+        Current.colorLeaderboard, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.respawnLimit, Current.chatReplies, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
         followerChecks = Game.FollowerChecks, followerChecksError = Game.FollowerCheckError, camera = Current.camera, Current.ui, Current.overlay, minimap = Minimap.State, bots = Bots,
         config = ConfigDto(),
     };

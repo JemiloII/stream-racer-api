@@ -679,6 +679,7 @@ static class Game
     public static bool SayInChat(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
+        if (TwitchAuth.SendChat(text)) { Plugin.Emit("chat", new { channel = StreamerLogin, text, via = "helix" }); return true; }
         try
         {
             var c = ChatClient; if (c == null || !c.IsConnected) return false;
@@ -711,9 +712,10 @@ static class Game
                 _scopesAt = System.DateTime.UtcNow; _scopesBusy = false; // no Unity API off the main thread
             });
         }
-        bool? canSend = _scopes == null ? (bool?)null : _scopes.Contains("chat:edit");
+        bool? canSend = TwitchAuth.Has(TwitchAuth.ChatScope) ? true : _scopes == null ? (bool?)null : _scopes.Contains("chat:edit");
         return new { connected = ChatConnected, channel = ChatChannel, login = StreamerLogin, replies = Settings.Current.chatReplies, canSend, scopes = _scopes, scopesError = _scopesError,
-                     note = canSend == false ? "the game's token has no chat:edit: Twitch drops replies; relay the color/denied SSE events from your bot instead" : canSend == null ? "scopes not known yet: ask again" : null };
+                     helix = TwitchAuth.Has(TwitchAuth.ChatScope), twitch = TwitchAuth.Status(),
+                     note = canSend == false ? "the game's token has no chat:edit: connect Twitch on the Settings page (user:write:chat) or relay the color/denied SSE events from your bot" : canSend == null ? "scopes not known yet: ask again" : null };
     }
 
     // ---- colors ----

@@ -17,7 +17,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.28.0"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.29.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit => typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] a && a.Length > 0 ? a[0].InformationalVersion : "dev";
     public static ConfigEntry<string> UpdateUrl;
     public static ConfigEntry<int> Port;
@@ -166,6 +166,13 @@ public class Plugin : BaseUnityPlugin
     };
 
     static readonly HashSet<string> Pages = new() { "controls", "camera", "bots", "settings", "api" };
+    static void WriteJson(HttpListenerResponse res, int status, object payload)
+    {
+        byte[] b = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(payload));
+        res.StatusCode = status; res.ContentType = "application/json"; res.ContentLength64 = b.Length;
+        try { res.OutputStream.Write(b, 0, b.Length); res.Close(); } catch { }
+    }
+
     static bool ServeUi(string path, HttpListenerResponse res)
     {
         if (path == "") path = "index.html";
@@ -267,6 +274,30 @@ public class Plugin : BaseUnityPlugin
         }
 
         if (req.HttpMethod == "GET" && path == "twitch/users") { TwitchUsers(req.QueryString["logins"], res); return; }
+        if (req.HttpMethod == "GET" && path == "twitch/auth")
+        {
+            string clientId = req.QueryString["clientId"] ?? Settings.Current.twitchClientId;
+            if (string.IsNullOrWhiteSpace(clientId)) { WriteJson(res, 400, new { error = "set settings.twitchClientId first (your Twitch app's client id)", redirectUri = TwitchAuth.RedirectUri }); return; }
+            if (clientId != Settings.Current.twitchClientId) { Settings.Current.twitchClientId = clientId.Trim(); Settings.Persist(); }
+            res.StatusCode = 302; res.RedirectLocation = TwitchAuth.AuthorizeUrl(clientId.Trim(), TwitchAuth.NewState()); res.Close(); return;
+        }
+        if (req.HttpMethod == "GET" && path == "twitch/callback")
+        {
+            byte[] page = Encoding.UTF8.GetBytes(TwitchAuth.CallbackHtml);
+            res.ContentType = "text/html; charset=utf-8"; res.ContentLength64 = page.Length;
+            try { res.OutputStream.Write(page, 0, page.Length); res.Close(); } catch { }
+            return;
+        }
+        if (req.HttpMethod == "POST" && path == "twitch/token")
+        {
+            string data = req.HasEntityBody ? new StreamReader(req.InputStream).ReadToEnd() : "";
+            Newtonsoft.Json.Linq.JObject o = null; try { o = Newtonsoft.Json.Linq.JObject.Parse(data); } catch { }
+            string token = (string)o?["token"], state = (string)o?["state"];
+            if (string.IsNullOrWhiteSpace(token)) { WriteJson(res, 400, new { error = "need {token}" }); return; }
+            if (!string.IsNullOrEmpty(state) && !TwitchAuth.StateOk(state)) { WriteJson(res, 400, new { error = "state mismatch: start again from /twitch/auth" }); return; }
+            var stored = TwitchAuth.Store(token);
+            WriteJson(res, stored["error"] != null ? 401 : 200, stored); return;
+        }
         if (req.HttpMethod == "PUT" && path.StartsWith("image/"))
         {
             string login = path.Substring(6);

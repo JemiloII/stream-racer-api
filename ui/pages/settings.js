@@ -149,6 +149,23 @@ function PluginConfig({ cfg }) {
 }
 
 const TIERS = [["everyone", "everyone"], ["follower", "followers +"], ["subscriber", "subscribers +"], ["off", "off"]];
+
+// Log the mod into Twitch with the streamer's own app: follower checks + chat replies need scopes the game's token lacks.
+function TwitchConnect() {
+  const { settings } = useStore();
+  const tw = settings.twitch || {};
+  const disconnect = async () => { if (confirm("Forget the Twitch login?")) { await api("/twitch/token", { method: "DELETE" }); } };
+  return html`
+    <div class="twitch" style=${{ gridColumn: "1 / -1" }}>
+      ${tw.connected
+        ? html`<p class="hint" style=${{ margin: 0 }}>Connected as <b>@${tw.login}</b> · follower checks ${tw.features?.followerChecks ? html`<span style=${{ color: "var(--live)" }}>on</span>` : html`<span style=${{ color: "var(--boom)" }}>off</span>`} · chat replies ${tw.features?.chatReplies ? html`<span style=${{ color: "var(--live)" }}>on</span>` : html`<span style=${{ color: "var(--boom)" }}>off</span>`}${tw.missing?.length ? html` · missing: <code>${tw.missing.join(" ")}</code>` : null}</p>`
+        : html`<p class="hint" style=${{ margin: 0 }}>Not connected: follower checks and chat replies are off. Add <code>${tw.redirectUri || "http://localhost:8793/twitch/callback"}</code> to your Twitch app's OAuth Redirect URLs, put the client id below, then connect.</p>`}
+      <div class="toolbar" style=${{ marginTop: 8 }}>
+        <button class="go" disabled=${!settings.twitchClientId} onClick=${() => window.open("/twitch/auth", "_blank")}>${tw.connected ? "Reconnect (re-auth)" : "Connect Twitch"}</button>
+        ${tw.connected ? html`<button onClick=${disconnect}>Disconnect</button>` : null}
+      </div>
+    </div>`;
+}
 function PerksForm() {
   const { settings, saveSettings } = useStore();
   const p = { colorCommand: "follower", coloredNames: "everyone", boostFollower: 0, boostSubscriber: 1, boostDeveloper: 1, boostHost: 0, ...(settings.perks || {}) };
@@ -162,7 +179,8 @@ function PerksForm() {
       <${Num} obj=${p} set=${set} k="boostSubscriber" step="1" label="Extra boosts: subscriber" />
       <${Num} obj=${p} set=${set} k="boostDeveloper" step="1" label="Extra boosts: developer" />
       <${Num} obj=${p} set=${set} k="boostHost" step="1" label="Extra boosts: host (you)" />
-      <label>Twitch client id (for follower checks)<input defaultValue=${settings.twitchClientId || ""} onBlur=${(e) => e.target.value.trim() !== (settings.twitchClientId || "") && saveSettings({ twitchClientId: e.target.value.trim() })} /></label>
+      <${TwitchConnect} />
+      <label>Twitch client id (your app at dev.twitch.tv)<input key=${settings.twitchClientId || ""} defaultValue=${settings.twitchClientId || ""} spellCheck="false" onBlur=${(e) => e.target.value.trim() !== (settings.twitchClientId || "") && saveSettings({ twitchClientId: e.target.value.trim() })} /></label>
       <label>Twitch token ${settings.twitchTokenSet ? html`<small style=${{ color: "var(--live)" }}>· set</small>` : html`<small style=${{ color: "var(--dim)" }}>· not set, follower = never</small>`}<input type="password" placeholder=${settings.twitchTokenSet ? "•••••• (stored)" : "paste token"} onKeyDown=${(e) => { if (e.key === "Enter") { saveSettings({ twitchToken: e.target.value.trim() }); e.target.value = ""; } }} /></label>
       <p class="hint" style=${{ gridColumn: "1 / -1", margin: 0 }}>Press Enter to save the token (empty clears it). Followers are looked up once per login per session. Without a token, "followers +" only lets subs, devs and you through.</p>
     </div>`;
@@ -243,7 +261,7 @@ export default function Settings() {
 
       <article>
         <header>Perks</header>
-        <p class="hint">Who gets what. Subscriber and developer come from the game; host is you; <b>follower needs a Twitch token</b> with <code>moderator:read:followers</code> (the game's own token can't check follows), paste one from your overlay/bot app below. Extra boosts stack: a subscribed follower gets both.</p>
+        <p class="hint">Who gets what. Subscriber and developer come from the game; host is you; <b>follower needs the Twitch login below</b> (the game's own token can't check follows). Extra boosts stack: a subscribed follower gets both.</p>
         <${PerksForm} />
       </article>
 

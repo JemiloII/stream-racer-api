@@ -73,6 +73,11 @@ static class Routes
             if (idx < 0) { status = 404; return new { error = "no such panel", panels = pm.panels.Select(pn => pn.name).ToList() }; }
             pm.PanelAnim(idx); return new { ok = true, panel = pm.panels[idx].name };
         }
+        if (root == "twitch" && x == "token")
+        {
+            if (method == "GET") return TwitchAuth.Status();
+            if (method == "DELETE") { TwitchAuth.Forget(); return Ok(1); }
+        }
         if (method == "GET" && root == "version")
         {
             Updates.Kick();

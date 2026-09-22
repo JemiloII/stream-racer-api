@@ -97,6 +97,7 @@ Works as an OBS custom browser dock. Pages and the overlays reconnect on their o
 | `PUT /config` | live plugin config: `{port, bindAll, token, hotkeyBoost, camUp, camDown, tickHz, posHz}`; port/bind changes restart the server |
 | `GET\|PUT /settings` | PUT merges: `autoJoin` (everyone on it joins every lobby), `bots`, `customBots`, `botOptions[login].autoBoost`, `webhooks` (call anything on `race_end` etc.), `perks`, `camera.shots` (director toggles: grid, high, side, sweep, pack, front, chase, orbit, overhead, prop, finish, duel, pileup, boom; omitted keys stay on), `chatReplies`, `respawnCommand` / `colorCommand` (alias lists, `a\|b`), `twitchToken` + `twitchClientId` (follower checks)… + read-only `config`, `followerChecks` |
 | `POST /autojoin/join` | join the list now (lobby only) |
+| `GET /twitch/auth` · `GET\|POST\|DELETE /twitch/token` | log the mod into Twitch with your own app (follower checks + chat replies); Settings → Perks → Connect Twitch |
 | `GET /twitch/users?logins=a,b` | resolve logins via Helix with the game's token: `{users:[{id,login,displayName,image,description}]}` |
 | `GET /image/:login` | a racer's custom join image, served by the plugin (so local paths work in browser overlays); `avatar` points here when set |
 | `GET /screen` | `{screen, scene, running, lobby, vehicles}`; a `screen` SSE event fires on every change |
