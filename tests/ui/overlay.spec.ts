@@ -110,3 +110,28 @@ test.describe("Overlay browser source (horizontal bar)", () => {
     await expect(page.locator("#racers .racer")).toHaveCount(0);
   });
 });
+
+test.describe("Horizontal bar spacing", () => {
+  test.beforeEach(async ({ page }) => { await installFakeEvents(page); });
+  // the sample field at 100% each: a live race would end the phase, so use a running snapshot with everyone on the line
+  const bunched = () => ({ ...racingSnapshot(), vehicles: racingSnapshot().vehicles.map((vehicle) => ({ ...vehicle, pct: 100 })) });
+
+  test("cars that finish together are spread out by place instead of stacking (min gap)", async ({ page }) => {
+    await mockJson(page, "/settings", { overlay: { size: 40 } });
+    await mockJson(page, "/race", bunched());
+    await page.goto("/overlay");
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    const lefts = await page.locator("#racers .racer").evaluateAll((cars) => cars.map((car) => ({ place: +(car.querySelector(".place")?.textContent || 0), left: parseFloat((car as HTMLElement).style.left) })));
+    const byPlace = [...lefts].sort((a, b) => a.place - b.place);
+    for (let i = 1; i < byPlace.length; i++) expect(byPlace[i - 1]!.left - byPlace[i]!.left).toBeGreaterThanOrEqual(34); // 85% of 40
+  });
+
+  test("?spread=0 keeps the raw positions", async ({ page }) => {
+    await mockJson(page, "/settings", { overlay: { size: 40 } });
+    await mockJson(page, "/race", bunched());
+    await page.goto("/overlay?spread=0");
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    const lefts = await page.locator("#racers .racer").evaluateAll((cars) => cars.map((car) => parseFloat((car as HTMLElement).style.left)));
+    expect(new Set(lefts.map((value) => Math.round(value))).size).toBe(1);
+  });
+});

@@ -10,7 +10,7 @@ export const token = query.get("token") || "";
 export const tokenQuery = token ? "?token=" + encodeURIComponent(token) : "";
 
 export const DEFAULTS = {
-  size: 40, names: true, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, bottom: 28, side: 24, banner: true, showInLobby: false,
+  size: 40, names: true, spread: -1, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, bottom: 28, side: 24, banner: true, showInLobby: false,
   board: 10, boardSide: "left", boardScale: 1, // leaderboard: rows, anchor, size
 };
 export const FADE_MS = 1000; // how long the cars take to fade after race_end

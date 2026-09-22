@@ -50,7 +50,7 @@ function MinimapForm() {
 }
 
 // Mirrors DEFAULTS in ui/overlay-shared.js. `board*` keys drive /leaderboard, the rest the bar; accent and side margin apply to both.
-const OV_DEFAULTS = { size: 40, names: true, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, bottom: 28, side: 24, banner: true, showInLobby: false, board: 10, boardSide: "left", boardScale: 1 };
+const OV_DEFAULTS = { size: 40, names: true, spread: -1, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, bottom: 28, side: 24, banner: true, showInLobby: false, board: 10, boardSide: "left", boardScale: 1 };
 // Browser-source link for the leaderboard: rows / side / scale as query params so one layout can have a small one and another a big one.
 function LeaderboardLink({ ov }) {
   const [rows, setRows] = useState(ov.board), [side, setSide] = useState(ov.boardSide), [scale, setScale] = useState(ov.boardScale), [copied, setCopied] = useState(false);
@@ -75,6 +75,7 @@ function OverlayForm() {
       <div class="ovgrid">
         <${Num} obj=${ov} set=${set} k="size" step="1" label="Avatar size (px)" />
         <${Num} obj=${ov} set=${set} k="lineHeight" step="1" label="Track line height (px)" />
+        <${Num} obj=${ov} set=${set} k="spread" step="1" label="Min gap between cars (px; -1 = auto, 0 = raw positions)" />
         <${Num} obj=${ov} set=${set} k="bottom" step="1" label="Track bottom offset (px)" />
         <${Num} obj=${ov} set=${set} k="side" step="1" label="Side margin (px, both sources)" />
         <label>Accent color (both sources)<input type="color" value=${ov.accent} onChange=${(e) => set("accent", e.target.value)} /></label>
