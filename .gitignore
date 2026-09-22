@@ -1,7 +1,7 @@
 build/
 obj/
 bin/
-lib/
+/lib/
 .cache/
 dist/
 node_modules/

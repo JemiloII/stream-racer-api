@@ -5,35 +5,32 @@
 //   ended (race_end)  → cars fade out over ~1 s, then nothing until the next lobby / race_start
 //   lobby             → nothing unless settings.overlay.showInLobby is on
 //   idle / post game  → nothing
-export const query = new URLSearchParams(location.search);
-export const token = query.get("token") || "";
-export const tokenQuery = token ? "?token=" + encodeURIComponent(token) : "";
+import { tokenQuery } from "./lib/query.js";
+import { OVERLAY_DEFAULTS } from "./lib/defaults.js";
+import { escapeHtml, initialsOf } from "./lib/text.js";
 
-export const DEFAULTS = {
-  size: 40, names: true, spread: -1, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, bottom: 28, side: 24, banner: true, showInLobby: false,
-  board: 10, boardSide: "left", boardScale: 1, // leaderboard: rows, anchor, size
-};
 export const FADE_MS = 1000; // how long the cars take to fade after race_end
 
-export const esc = (text) => String(text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-export const initials = (racer) => esc((racer.displayName || racer.login || "?").slice(0, 2).toUpperCase());
-export const pic = (racer, cls = "") => racer.avatar ? `<img class="pic ${cls}" src="${esc(racer.avatar)}" alt="">` : `<div class="pic init ${cls}">${initials(racer)}</div>`;
-export const ordinal = (place) => place === 1 ? "1st" : place === 2 ? "2nd" : place === 3 ? "3rd" : place + "th";
+// A racer's picture for innerHTML: the avatar, or initials in a colored box.
+export const avatarHtml = (racer, className = "") =>
+  racer.avatar ? `<img class="pic ${className}" src="${escapeHtml(racer.avatar)}" alt="">` : `<div class="pic init ${className}">${escapeHtml(initialsOf(racer))}</div>`;
 
-// A tiny feed object: `feed.on(name, fn)` for "snapshot" (any change to the field), "pos" (one 60 Hz frame),
-// "settings" (settings.overlay), "phase", and the pass-through game events (boom, boost, respawn, finisher).
+const byPlace = (a, b) => a.place - b.place;
+
+// A tiny feed object: `feed.on(name, listener)` for "snapshot" (any change to the field), "pos" (one 60 Hz frame),
+// "settings" (settings.overlay with defaults), "phase", and the pass-through game events (boom, boost, respawn, finisher).
 export function createFeed() {
   const listeners = {};
-  const emit = (name, ...args) => { for (const fn of listeners[name] || []) fn(...args); };
+  const emit = (name, ...args) => { for (const listener of listeners[name] || []) listener(...args); };
   let fadeTimer;
 
   const feed = {
-    snap: { running: false, lobby: false, vehicles: [] },
+    snapshot: { running: false, lobby: false, vehicles: [] },
     phase: "idle",
-    cfg: { ...DEFAULTS },
-    on(name, fn) { (listeners[name] ||= []).push(fn); return feed; },
-    visible() { return feed.phase === "racing" || feed.phase === "ended" || (feed.phase === "lobby" && !!feed.cfg.showInLobby); },
-    vehicles() { return feed.visible() ? feed.snap.vehicles : []; },
+    look: { ...OVERLAY_DEFAULTS },
+    on(name, listener) { (listeners[name] ||= []).push(listener); return feed; },
+    visible() { return feed.phase === "racing" || feed.phase === "ended" || (feed.phase === "lobby" && !!feed.look.showInLobby); },
+    vehicles() { return feed.visible() ? feed.snapshot.vehicles : []; },
     start() { resync(); connect(); return feed; },
     // Fake-able for tests: everything below goes through these.
     setSnapshot, setPhase, applySettings, applyPos,
@@ -49,53 +46,55 @@ export function createFeed() {
     feed.phase = phase;
     if (phase === "ended") {
       // Cars fade for FADE_MS (CSS transition on body.race-over), then the field is dropped so nothing is left drawn.
-      fadeTimer = setTimeout(() => { feed.snap = { ...feed.snap, running: false, vehicles: [] }; feed.phase = "idle"; reflect(); emit("phase", "idle"); emit("snapshot", feed.snap); }, FADE_MS + 100);
+      fadeTimer = setTimeout(() => { feed.snapshot = { ...feed.snapshot, running: false, vehicles: [] }; feed.phase = "idle"; reflect(); emit("phase", "idle"); emit("snapshot", feed.snapshot); }, FADE_MS + 100);
     }
     reflect(); emit("phase", phase);
   }
   function phaseOf(snapshot) { return snapshot.running ? "racing" : snapshot.lobby ? "lobby" : "idle"; }
   function setSnapshot(snapshot, phase) {
-    feed.snap = snapshot || { vehicles: [] };
-    feed.snap.vehicles = (feed.snap.vehicles || []).slice().sort((a, b) => a.place - b.place);
+    feed.snapshot = snapshot || { vehicles: [] };
+    feed.snapshot.vehicles = (feed.snapshot.vehicles || []).slice().sort(byPlace);
     // A fetch landing mid-fade must not cut the fade short; the fade timer ends it.
-    if (!(feed.phase === "ended" && phase === undefined)) setPhase(phase ?? phaseOf(feed.snap));
-    emit("snapshot", feed.snap);
+    if (!(feed.phase === "ended" && phase === undefined)) setPhase(phase ?? phaseOf(feed.snapshot));
+    emit("snapshot", feed.snapshot);
   }
   function applySettings(overlay) {
-    feed.cfg = { ...DEFAULTS, ...(overlay || {}) };
-    reflect(); emit("settings", feed.cfg);
+    feed.look = { ...OVERLAY_DEFAULTS, ...(overlay || {}) };
+    reflect(); emit("settings", feed.look);
   }
   function applyPos(frame) {
-    const byLogin = new Map(feed.snap.vehicles.map((v) => [v.login, v]));
+    const vehiclesByLogin = new Map(feed.snapshot.vehicles.map((vehicle) => [vehicle.login, vehicle]));
     for (const [login, x, z, pct, place, finished] of frame.v || []) {
-      const v = byLogin.get(login); if (!v) continue;
-      v.x = x; v.z = z; v.pct = pct; v.place = place; v.finished = !!finished;
+      const vehicle = vehiclesByLogin.get(login); if (!vehicle) continue;
+      vehicle.x = x; vehicle.z = z; vehicle.pct = pct; vehicle.place = place; vehicle.finished = !!finished;
     }
-    feed.snap.vehicles.sort((a, b) => a.place - b.place);
+    feed.snapshot.vehicles.sort(byPlace);
     emit("pos", frame);
   }
 
+  const fetchRace = () => fetch("/race" + tokenQuery).then((response) => response.json()).then((snapshot) => setSnapshot(snapshot)).catch(() => {});
   function resync() {
-    fetch("/race" + tokenQuery).then((r) => r.json()).then((s) => setSnapshot(s)).catch(() => {});
-    fetch("/settings" + tokenQuery).then((r) => r.json()).then((s) => applySettings(s.overlay)).catch(() => {});
+    fetchRace();
+    fetch("/settings" + tokenQuery).then((response) => response.json()).then((settings) => applySettings(settings.overlay)).catch(() => {});
   }
-  let es, retry;
+  let eventSource, retryTimer;
   function connect() {
-    clearTimeout(retry); es?.close();
-    es = new EventSource("/events" + tokenQuery);
-    es.addEventListener("lobby", (e) => setSnapshot(JSON.parse(e.data), "lobby"));
-    es.addEventListener("race_start", (e) => setSnapshot(JSON.parse(e.data), "racing"));
-    es.addEventListener("positions", (e) => setSnapshot(JSON.parse(e.data), "racing"));
-    es.addEventListener("race_end", (e) => setSnapshot(JSON.parse(e.data), "ended"));
-    es.addEventListener("pos", (e) => applyPos(JSON.parse(e.data)));
-    es.addEventListener("joined", () => fetch("/race" + tokenQuery).then((r) => r.json()).then((s) => setSnapshot(s)).catch(() => {}));
-    es.addEventListener("screen", (e) => { const s = JSON.parse(e.data); if (feed.phase !== "ended" && !s.running && !s.lobby) setPhase("idle"); });
-    es.addEventListener("settings", (e) => applySettings(JSON.parse(e.data).overlay));
-    for (const name of ["boom", "boost", "respawn", "finisher"]) es.addEventListener(name, (e) => emit(name, JSON.parse(e.data)));
+    clearTimeout(retryTimer); eventSource?.close();
+    eventSource = new EventSource("/events" + tokenQuery);
+    const payloadOf = (event) => JSON.parse(event.data);
+    eventSource.addEventListener("lobby", (event) => setSnapshot(payloadOf(event), "lobby"));
+    eventSource.addEventListener("race_start", (event) => setSnapshot(payloadOf(event), "racing"));
+    eventSource.addEventListener("positions", (event) => setSnapshot(payloadOf(event), "racing"));
+    eventSource.addEventListener("race_end", (event) => setSnapshot(payloadOf(event), "ended"));
+    eventSource.addEventListener("pos", (event) => applyPos(payloadOf(event)));
+    eventSource.addEventListener("joined", fetchRace);
+    eventSource.addEventListener("screen", (event) => { const screen = payloadOf(event); if (feed.phase !== "ended" && !screen.running && !screen.lobby) setPhase("idle"); });
+    eventSource.addEventListener("settings", (event) => applySettings(payloadOf(event).overlay));
+    for (const name of ["boom", "boost", "respawn", "finisher"]) eventSource.addEventListener(name, (event) => emit(name, payloadOf(event)));
     // Chromium quietly stops retrying after a few refused connections (a game restart takes ~35 s),
     // so we never rely on its retry: every error closes the stream and we reopen it ourselves, forever.
-    es.onopen = () => { console.log("[overlay] events connected"); resync(); };
-    es.onerror = () => { console.log("[overlay] events lost, retrying in 3s"); es.close(); retry = setTimeout(connect, 3000); };
+    eventSource.onopen = () => { console.log("[overlay] events connected"); resync(); };
+    eventSource.onerror = () => { console.log("[overlay] events lost, retrying in 3s"); eventSource.close(); retryTimer = setTimeout(connect, 3000); };
   }
   return feed;
 }

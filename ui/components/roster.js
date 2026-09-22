@@ -1,66 +1,68 @@
+// Shared people pieces: a Twitch lookup box (logins / links → resolved users), the person card, the card grid and
+// the empty placeholder. Used by the Bots page and the auto-join list on Settings.
 import { useState, useEffect } from "react";
-import { html, useCss, api } from "../store.js";
-
-// Shared people pieces: a Twitch lookup box (logins/links -> resolved users) and the person card.
-// Used by the Bots page and the auto-join list on Settings.
-
-export const readFile = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+import { html, useCss } from "../lib/html.js";
+import { api } from "../lib/api.js";
+import { initialsOf } from "../lib/text.js";
 
 // Resolve Twitch logins to {id, login, displayName, image}; cached for the page's life. Unknown logins get {missing: true}.
-const cache = {};
+const userCache = {};
 export function useTwitchUsers(logins) {
-  const [, bump] = useState(0);
-  const need = logins.filter((l) => !cache[l]);
+  const [, rerender] = useState(0);
+  const unresolved = logins.filter((login) => !userCache[login]);
   useEffect(() => {
-    if (!need.length) return;
-    for (const l of need) cache[l] = { login: l, pending: true };
-    api(`/twitch/users?logins=${encodeURIComponent(need.join(","))}`, { method: "GET" }).then((r) => {
-      for (const l of need) cache[l] = { login: l, missing: true };
-      for (const u of r?.users || []) cache[u.login] = u;
-      bump((n) => n + 1);
+    if (!unresolved.length) return;
+    for (const login of unresolved) userCache[login] = { login, pending: true };
+    api(`/twitch/users?logins=${encodeURIComponent(unresolved.join(","))}`, { method: "GET" }).then((response) => {
+      for (const login of unresolved) userCache[login] = { login, missing: true };
+      for (const user of response?.users || []) userCache[user.login] = user;
+      rerender((count) => count + 1);
     });
-  }, [need.join(",")]);
-  return cache;
+  }, [unresolved.join(",")]);
+  return userCache;
 }
+
+// "@Name", "twitch.tv/name" or "name" → "name"
+const loginOf = (text) => text.trim().toLowerCase().replace(/^@/, "").replace(/^https?:\/\/(www\.)?twitch\.tv\//, "");
 
 // Text box: paste logins or twitch.tv links, Enter/Add resolves them and hands back the users found.
 export function TwitchLookup({ onAdd, placeholder = "Twitch logins or twitch.tv links, comma separated", label = "Add" }) {
   useCss("components/roster.css");
-  const [text, setText] = useState(""), [busy, setBusy] = useState(false), [msg, setMsg] = useState("");
+  const [text, setText] = useState(""), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const add = async () => {
-    const want = [...new Set(text.split(/[\s,]+/).map((s) => s.trim().toLowerCase().replace(/^@/, "").replace(/^https?:\/\/(www\.)?twitch\.tv\//, "")).filter(Boolean))];
-    if (!want.length) return;
+    const wanted = [...new Set(text.split(/[\s,]+/).map(loginOf).filter(Boolean))];
+    if (!wanted.length) return;
     setBusy(true);
-    const r = await api(`/twitch/users?logins=${encodeURIComponent(want.join(","))}`, { method: "GET" });
+    const response = await api(`/twitch/users?logins=${encodeURIComponent(wanted.join(","))}`, { method: "GET" });
     setBusy(false);
-    if (!r) return;
-    for (const u of r.users) cache[u.login] = u;
-    const bad = want.filter((l) => !r.users.some((u) => u.login === l));
-    setMsg(bad.length ? `Not on Twitch: ${bad.join(", ")}` : "");
-    if (r.users.length) { await onAdd(r.users); setText(""); }
+    if (!response) return;
+    for (const user of response.users) userCache[user.login] = user;
+    const unknown = wanted.filter((login) => !response.users.some((user) => user.login === login));
+    setMessage(unknown.length ? `Not on Twitch: ${unknown.join(", ")}` : "");
+    if (response.users.length) { await onAdd(response.users); setText(""); }
   };
   return html`
     <div class="lookup">
-      <input placeholder=${placeholder} value=${text} onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && add()} spellCheck="false" />
+      <input placeholder=${placeholder} value=${text} onInput=${(event) => setText(event.target.value)} onKeyDown=${(event) => event.key === "Enter" && add()} spellCheck="false" />
       <button onClick=${add} disabled=${busy || !text.trim()} aria-busy=${busy}>${label}</button>
-      ${msg ? html`<p class="lookup-msg">${msg}</p>` : null}
+      ${message ? html`<p class="lookup-msg">${message}</p>` : null}
     </div>`;
 }
 
-// One person. r: {login, displayName, color?, image?, kind: "twitch"|"custom", missing?}. Slots: top-left buttons, badges, bottom.
-export function Card({ r, picked, inLobby, onClick, tools, badges, children, picture }) {
+// One person. person: {login, displayName, color?, image?, kind: "twitch"|"custom", missing?}.
+// Slots: `tools` (top-left buttons), `badges` (labels under them), `picture` (replaces the avatar), children (bottom).
+export function Card({ person, picked, inLobby, onClick, tools, badges, children, picture }) {
   useCss("components/roster.css");
-  const initials = (r.displayName || r.login || "?").slice(0, 2).toUpperCase();
-  const pic = picture ?? (r.image
-    ? html`<img src=${r.kind === "custom" ? "/image/" + r.login + "?v=" + encodeURIComponent(r.image) : r.image} alt="" loading="lazy" style=${r.color ? { borderColor: r.color } : {}} />`
-    : html`<div class="ph" style=${r.color ? { background: r.color, color: "#000" } : {}}>${initials}</div>`);
+  const shownPicture = picture ?? (person.image
+    ? html`<img src=${person.kind === "custom" ? "/image/" + person.login + "?v=" + encodeURIComponent(person.image) : person.image} alt="" loading="lazy" style=${person.color ? { borderColor: person.color } : {}} />`
+    : html`<div class="ph" style=${person.color ? { background: person.color, color: "#000" } : {}}>${initialsOf(person)}</div>`);
   return html`
-    <div class=${"card" + (picked ? " on" : "") + (inLobby ? " in" : "") + (r.missing ? " bad" : "")} onClick=${onClick}>
+    <div class=${"card" + (picked ? " on" : "") + (inLobby ? " in" : "") + (person.missing ? " bad" : "")} onClick=${onClick}>
       <div class="tools">${tools}</div>
-      <div class="badges">${(badges || []).map((b) => html`<span key=${b} class=${"badge " + b.toLowerCase().replace(/\W+/g, "-")}>${b}</span>`)}</div>
-      ${pic}
-      <div class="nm" style=${r.kind === "custom" && r.color ? { color: r.color } : {}}>${r.displayName || r.login}</div>
-      <div class="lg">${r.missing ? "not on Twitch" : (r.kind === "custom" ? "custom · " : "@") + r.login}${inLobby ? " · in lobby" : ""}</div>
+      <div class="badges">${(badges || []).map((badge) => html`<span key=${badge} class=${"badge " + badge.toLowerCase().replace(/\W+/g, "-")}>${badge}</span>`)}</div>
+      ${shownPicture}
+      <div class="nm" style=${person.kind === "custom" && person.color ? { color: person.color } : {}}>${person.displayName || person.login}</div>
+      <div class="lg">${person.missing ? "not on Twitch" : (person.kind === "custom" ? "custom · " : "@") + person.login}${inLobby ? " · in lobby" : ""}</div>
       ${children}
     </div>`;
 }

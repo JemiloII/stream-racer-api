@@ -6,7 +6,7 @@ import { expectShell } from "../fixtures/shell";
 interface DocumentedRoute { method: string; path: string }
 function documentedRoutes(): DocumentedRoute[] {
   const source = readFileSync(new URL("../../../ui/pages/api.js", import.meta.url), "utf8");
-  return [...source.matchAll(/\{ m: "(GET|POST|PUT|DELETE)", p: "([^"]+)"/g)].map(([, method = "", path = ""]) => ({ method, path }));
+  return [...source.matchAll(/\{ method: "(GET|POST|PUT|DELETE)", path: "([^"]+)"/g)].map(([, method = "", path = ""]) => ({ method, path }));
 }
 
 test.describe("API page", () => {

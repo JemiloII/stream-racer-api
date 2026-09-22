@@ -1,157 +1,165 @@
 // Browser-source mini map: the route outline + car dots, drawn on a canvas that fills the page.
 // Same look settings as the in-game map (Settings → Mini map), live via the settings event.
-// Query: ?token=  &names=1 (labels)  &track=%23fff  &bg=%23000  &alpha=0.55  &marker=3
-const q = new URLSearchParams(location.search);
-const token = q.get("token") || "";
-const T = token ? "?token=" + encodeURIComponent(token) : "";
-const DEFAULTS = { marker: 3, bg: "#000000", alpha: 0.55, track: "#ffffff", pad: 1.15, leaderBig: true, names: true, aspect: "1:1" };
+// Query: ?token=  &names=1 (labels)  &leaderBig=1  &aspect=16:9  &track=%23fff  &bg=%23000  &alpha=0.55  &marker=3
+import { query, tokenQuery } from "./lib/query.js";
+import { MINIMAP_DEFAULTS } from "./lib/defaults.js";
+
 // The canvas fills the window; the map box is the largest rectangle of the chosen aspect that fits, centred.
 // Size the OBS source to that ratio and the box fills it exactly.
-let W = 400, H = 300, OX = 0, OY = 0;
-let cfg = { ...DEFAULTS };
+let boxWidth = 400, boxHeight = 300, boxLeft = 0, boxTop = 0;
+let look = { ...MINIMAP_DEFAULTS };
 
 const canvas = document.getElementById("map");
-const ctx = canvas.getContext("2d");
-let snap = { vehicles: [] }, route = [], bounds = null;
-// smooth movement: each car keeps a shown position that chases its latest reported one
-const shown = new Map(); // login -> {x, z, tx, tz}
+const context = canvas.getContext("2d");
+let snapshot = { vehicles: [] }, route = [], bounds = null;
+// Smooth movement: each car keeps a shown position that chases its latest reported one.
+const shownPositions = new Map(); // login -> {x, z, targetX, targetZ}
+const rememberPosition = (vehicle) => { if (vehicle.x != null && !shownPositions.has(vehicle.login)) shownPositions.set(vehicle.login, { x: vehicle.x, z: vehicle.z, targetX: vehicle.x, targetZ: vehicle.z }); };
 function applyPos(frame) {
-  const byLogin = new Map(snap.vehicles.map((v) => [v.login, v]));
-  for (const [login, x, z, pct, place, fin] of frame.v) {
-    const v = byLogin.get(login); if (!v) continue;
-    v.x = x; v.z = z; v.pct = pct; v.place = place; v.finished = !!fin;
-    const s = shown.get(login); if (s) { s.tx = x; s.tz = z; } else shown.set(login, { x, z, tx: x, tz: z });
+  const vehiclesByLogin = new Map(snapshot.vehicles.map((vehicle) => [vehicle.login, vehicle]));
+  for (const [login, x, z, pct, place, finished] of frame.v) {
+    const vehicle = vehiclesByLogin.get(login); if (!vehicle) continue;
+    vehicle.x = x; vehicle.z = z; vehicle.pct = pct; vehicle.place = place; vehicle.finished = !!finished;
+    const shown = shownPositions.get(login); if (shown) { shown.targetX = x; shown.targetZ = z; } else shownPositions.set(login, { x, z, targetX: x, targetZ: z });
   }
-  snap.vehicles.sort((a, b) => a.place - b.place);
+  snapshot.vehicles.sort((a, b) => a.place - b.place);
 }
-let last = performance.now();
-function loop(now) {
-  const k = 1 - Math.exp(-(now - last) / 60); last = now; // ~60 ms ease
-  for (const [login, s] of shown) { s.x += (s.tx - s.x) * k; s.z += (s.tz - s.z) * k; }
-  draw(); requestAnimationFrame(loop);
+let lastFrameAt = performance.now();
+function animate(now) {
+  const blend = 1 - Math.exp(-(now - lastFrameAt) / 60); lastFrameAt = now; // ~60 ms ease
+  for (const [, shown] of shownPositions) { shown.x += (shown.targetX - shown.x) * blend; shown.z += (shown.targetZ - shown.z) * blend; }
+  draw(); requestAnimationFrame(animate);
 }
-requestAnimationFrame(loop);
+requestAnimationFrame(animate);
 
-function applyCfg(o) {
-  cfg = { ...DEFAULTS, ...(o || {}) };
-  for (const k of ["track", "bg", "alpha", "marker", "pad"]) if (q.get(k)) cfg[k] = k === "track" || k === "bg" ? q.get(k) : +q.get(k);
-  if (q.get("names") != null) cfg.names = q.get("names") === "1";
-  if (q.get("leaderBig") != null) cfg.leaderBig = q.get("leaderBig") === "1";
-  if (q.get("aspect")) cfg.aspect = q.get("aspect");
+function applyLook(saved) {
+  look = { ...MINIMAP_DEFAULTS, ...(saved || {}) };
+  for (const key of ["track", "bg", "alpha", "marker", "pad"]) if (query.get(key)) look[key] = key === "track" || key === "bg" ? query.get(key) : +query.get(key);
+  if (query.get("names") != null) look.names = query.get("names") === "1";
+  if (query.get("leaderBig") != null) look.leaderBig = query.get("leaderBig") === "1";
+  if (query.get("aspect")) look.aspect = query.get("aspect");
   fit();
 }
 
-function ratio() {
-  const a = String(cfg.aspect || "16:9").trim().toLowerCase();
-  if (a === "auto" && bounds) return Math.max(0.2, (bounds.maxX - bounds.minX) / Math.max(1, bounds.maxZ - bounds.minZ));
-  const m = /^(\d+(?:\.\d+)?)\s*[:x\/]\s*(\d+(?:\.\d+)?)$/.exec(a);
-  return m ? +m[1] / +m[2] : 16 / 9;
+// Width ÷ height of the map box: "16:9", "4x3", or "auto" = the track's own bounds.
+function aspectRatio() {
+  const aspect = String(look.aspect || "16:9").trim().toLowerCase();
+  if (aspect === "auto" && bounds) return Math.max(0.2, (bounds.maxX - bounds.minX) / Math.max(1, bounds.maxZ - bounds.minZ));
+  const match = /^(\d+(?:\.\d+)?)\s*[:x\/]\s*(\d+(?:\.\d+)?)$/.exec(aspect);
+  return match ? +match[1] / +match[2] : 16 / 9;
 }
 function fit() {
   const dpr = devicePixelRatio || 1;
   canvas.style.width = innerWidth + "px"; canvas.style.height = innerHeight + "px";
   canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
-  const r = ratio();
-  W = innerWidth; H = W / r;
-  if (H > innerHeight) { H = innerHeight; W = H * r; }
-  OX = (innerWidth - W) / 2; OY = (innerHeight - H) / 2;
-  ctx.setTransform(dpr, 0, 0, dpr, OX * dpr, OY * dpr);
+  const ratio = aspectRatio();
+  boxWidth = innerWidth; boxHeight = boxWidth / ratio;
+  if (boxHeight > innerHeight) { boxHeight = innerHeight; boxWidth = boxHeight * ratio; }
+  boxLeft = (innerWidth - boxWidth) / 2; boxTop = (innerHeight - boxHeight) / 2;
+  context.setTransform(dpr, 0, 0, dpr, boxLeft * dpr, boxTop * dpr);
   draw();
 }
 addEventListener("resize", fit);
 
-function project() {
+// World (x, z) → box pixels, the track centred and scaled to fit with `pad` margin. Null until the track is known.
+function projector() {
   if (!bounds) return null;
-  const bw = Math.max(1, bounds.maxX - bounds.minX) * cfg.pad, bh = Math.max(1, bounds.maxZ - bounds.minZ) * cfg.pad;
-  const s = Math.min(W / bw, H / bh);
-  const cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2;
-  return (x, z) => [W / 2 + (x - cx) * s, H / 2 - (z - cz) * s]; // z up on screen, like looking down with north up
+  const spanX = Math.max(1, bounds.maxX - bounds.minX) * look.pad, spanZ = Math.max(1, bounds.maxZ - bounds.minZ) * look.pad;
+  const scale = Math.min(boxWidth / spanX, boxHeight / spanZ);
+  const centerX = (bounds.minX + bounds.maxX) / 2, centerZ = (bounds.minZ + bounds.maxZ) / 2;
+  return (x, z) => [boxWidth / 2 + (x - centerX) * scale, boxHeight / 2 - (z - centerZ) * scale]; // z up on screen, like looking down with north up
 }
 
-function hexA(hex, a) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
-  if (!m) return `rgba(0,0,0,${a})`;
-  const n = parseInt(m[1], 16);
-  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+function hexToRgba(hex, alpha) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!match) return `rgba(0,0,0,${alpha})`;
+  const rgb = parseInt(match[1], 16);
+  return `rgba(${rgb >> 16 & 255},${rgb >> 8 & 255},${rgb & 255},${alpha})`;
 }
 
 function draw() {
-  ctx.clearRect(-OX, -OY, innerWidth, innerHeight);
-  ctx.fillStyle = hexA(cfg.bg, cfg.alpha);
-  roundRect(0, 0, W, H, 10); ctx.fill();
-  const P = project();
-  if (!P || route.length < 2) return;
-  ctx.lineCap = "round"; ctx.lineJoin = "round";
-  ctx.strokeStyle = cfg.track; ctx.lineWidth = Math.max(2, H * 0.018);
-  ctx.beginPath();
-  route.forEach(([x, z], i) => { const [px, py] = P(x, z); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
-  ctx.stroke();
-  const leader = snap.vehicles.find((v) => !v.finished) || snap.vehicles[0];
-  const base = H * cfg.marker / 100;
+  context.clearRect(-boxLeft, -boxTop, innerWidth, innerHeight);
+  context.fillStyle = hexToRgba(look.bg, look.alpha);
+  roundRect(0, 0, boxWidth, boxHeight, 10); context.fill();
+  const toScreen = projector();
+  if (!toScreen || route.length < 2) return;
+  context.lineCap = "round"; context.lineJoin = "round";
+  context.strokeStyle = look.track; context.lineWidth = Math.max(2, boxHeight * 0.018);
+  context.beginPath();
+  route.forEach(([x, z], index) => { const [px, py] = toScreen(x, z); index ? context.lineTo(px, py) : context.moveTo(px, py); });
+  context.stroke();
+  const leader = snapshot.vehicles.find((vehicle) => !vehicle.finished) || snapshot.vehicles[0];
+  const dotSize = boxHeight * look.marker / 100;
   const dots = [];
-  for (const v of [...snap.vehicles].reverse()) { // draw 1st last so it sits on top
-    if (v.x == null) continue;
-    const s = shown.get(v.login);
-    const [px, py] = P(s ? s.x : v.x, s ? s.z : v.z);
-    const r = base / 2 * (cfg.leaderBig && v === leader ? 1.6 : 1) * (v.finished ? 0.6 : 1);
-    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fillStyle = v.color || "#fff"; ctx.fill();
-    ctx.lineWidth = Math.max(1, r * 0.25); ctx.strokeStyle = "rgba(0,0,0,.7)"; ctx.stroke();
-    dots.push({ v, px, py, r });
+  for (const vehicle of [...snapshot.vehicles].reverse()) { // draw 1st last so it sits on top
+    if (vehicle.x == null) continue;
+    const shown = shownPositions.get(vehicle.login);
+    const [px, py] = toScreen(shown ? shown.x : vehicle.x, shown ? shown.z : vehicle.z);
+    const radius = dotSize / 2 * (look.leaderBig && vehicle === leader ? 1.6 : 1) * (vehicle.finished ? 0.6 : 1);
+    context.beginPath(); context.arc(px, py, radius, 0, Math.PI * 2);
+    context.fillStyle = vehicle.color || "#fff"; context.fill();
+    context.lineWidth = Math.max(1, radius * 0.25); context.strokeStyle = "rgba(0,0,0,.7)"; context.stroke();
+    dots.push({ vehicle, px, py, radius });
   }
-  if (cfg.names) labels(dots, base);
+  if (look.names) drawLabels(dots, dotSize);
 }
 
 // Names beside their dot (right, or left near the edge), pushed apart vertically until nothing overlaps.
-function labels(dots, base) {
-  const fs = Math.max(9, base * 0.9), lineH = fs * 1.15, gap = base * 0.7;
-  ctx.font = `600 ${fs}px "Chakra Petch", sans-serif`; ctx.textBaseline = "middle";
+function drawLabels(dots, dotSize) {
+  const fontSize = Math.max(9, dotSize * 0.9), lineHeight = fontSize * 1.15, gap = dotSize * 0.7;
+  context.font = `600 ${fontSize}px "Chakra Petch", sans-serif`; context.textBaseline = "middle";
   const placed = [];
-  for (const d of [...dots].sort((a, b) => a.py - b.py)) {
-    const text = d.v.displayName || d.v.login;
-    const w = ctx.measureText(text).width + 4;
-    const flip = d.px + gap + w > W - 4;
-    const x0 = flip ? d.px - gap - w : d.px + gap, x1 = x0 + w;
-    let y = Math.min(Math.max(d.py, fs * 0.6), H - fs * 0.6);
+  for (const dot of [...dots].sort((a, b) => a.py - b.py)) {
+    const text = dot.vehicle.displayName || dot.vehicle.login;
+    const textWidth = context.measureText(text).width + 4;
+    const flip = dot.px + gap + textWidth > boxWidth - 4;
+    const left = flip ? dot.px - gap - textWidth : dot.px + gap, right = left + textWidth;
+    let y = Math.min(Math.max(dot.py, fontSize * 0.6), boxHeight - fontSize * 0.6);
     let moved = true, guard = 0;
     while (moved && guard++ < 20) {
       moved = false;
-      for (const o of placed) if (x0 < o.x1 && x1 > o.x0 && Math.abs(y - o.y) < lineH) { y = o.y + lineH; moved = true; }
+      for (const other of placed) if (left < other.right && right > other.left && Math.abs(y - other.y) < lineHeight) { y = other.y + lineHeight; moved = true; }
     }
-    placed.push({ x0, x1, y });
-    ctx.textAlign = flip ? "right" : "left";
-    const tx = flip ? d.px - gap : d.px + gap;
-    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.lineJoin = "round"; ctx.strokeText(text, tx, y);
-    ctx.fillStyle = d.v.color || "#fff"; ctx.fillText(text, tx, y);
+    placed.push({ left, right, y });
+    context.textAlign = flip ? "right" : "left";
+    const textX = flip ? dot.px - gap : dot.px + gap;
+    context.lineWidth = 3; context.strokeStyle = "rgba(0,0,0,.85)"; context.lineJoin = "round"; context.strokeText(text, textX, y);
+    context.fillStyle = dot.vehicle.color || "#fff"; context.fillText(text, textX, y);
   }
-  ctx.textBaseline = "alphabetic";
+  context.textBaseline = "alphabetic";
 }
-function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function roundRect(x, y, width, height, radius) {
+  context.beginPath(); context.moveTo(x + radius, y);
+  context.arcTo(x + width, y, x + width, y + height, radius); context.arcTo(x + width, y + height, x, y + height, radius);
+  context.arcTo(x, y + height, x, y, radius); context.arcTo(x, y, x + width, y, radius); context.closePath();
+}
 
 async function loadTrack() {
-  try { const t = await (await fetch("/track" + T)).json(); route = t.points || []; bounds = t.bounds || null; } catch { route = []; bounds = null; }
+  try { const track = await (await fetch("/track" + tokenQuery)).json(); route = track.points || []; bounds = track.bounds || null; } catch { route = []; bounds = null; }
   fit();
 }
+const fetchRace = () => fetch("/race" + tokenQuery).then((response) => response.json()).then((race) => { snapshot = race; }).catch(() => {});
 function resync() {
-  fetch("/race" + T).then((r) => r.json()).then((s) => { snap = s; }).catch(() => {});
-  fetch("/settings" + T).then((r) => r.json()).then((s) => applyCfg(s.minimap)).catch(() => {});
+  fetchRace();
+  fetch("/settings" + tokenQuery).then((response) => response.json()).then((settings) => applyLook(settings.minimap)).catch(() => {});
   loadTrack();
 }
 
-let es, retry;
+let eventSource, retryTimer;
 function connect() {
-  clearTimeout(retry); es?.close();
-  es = new EventSource("/events" + T);
-  for (const ev of ["lobby", "race_start", "positions"]) es.addEventListener(ev, (e) => { snap = JSON.parse(e.data); for (const v of snap.vehicles) if (v.x != null && !shown.has(v.login)) shown.set(v.login, { x: v.x, z: v.z, tx: v.x, tz: v.z }); });
+  clearTimeout(retryTimer); eventSource?.close();
+  eventSource = new EventSource("/events" + tokenQuery);
+  const onSnapshot = (event) => { snapshot = JSON.parse(event.data); for (const vehicle of snapshot.vehicles) rememberPosition(vehicle); };
+  for (const name of ["lobby", "race_start", "positions"]) eventSource.addEventListener(name, onSnapshot);
   // race over: clear the map (keep the outline)
-  es.addEventListener("race_end", () => { snap = { vehicles: [] }; shown.clear(); });
-  es.addEventListener("lobby", () => { shown.clear(); });
-  es.addEventListener("pos", (e) => applyPos(JSON.parse(e.data)));
-  es.addEventListener("race_start", loadTrack);
-  es.addEventListener("lobby", loadTrack);
-  es.addEventListener("joined", () => fetch("/race" + T).then((r) => r.json()).then((s) => { snap = s; }));
-  es.addEventListener("settings", (e) => applyCfg(JSON.parse(e.data).minimap));
-  es.onopen = resync;
-  es.onerror = () => { es.close(); retry = setTimeout(connect, 3000); };
+  eventSource.addEventListener("race_end", () => { snapshot = { vehicles: [] }; shownPositions.clear(); });
+  eventSource.addEventListener("lobby", () => { shownPositions.clear(); });
+  eventSource.addEventListener("pos", (event) => applyPos(JSON.parse(event.data)));
+  eventSource.addEventListener("race_start", loadTrack);
+  eventSource.addEventListener("lobby", loadTrack);
+  eventSource.addEventListener("joined", () => fetch("/race" + tokenQuery).then((response) => response.json()).then((race) => { snapshot = race; }));
+  eventSource.addEventListener("settings", (event) => applyLook(JSON.parse(event.data).minimap));
+  eventSource.onopen = resync;
+  eventSource.onerror = () => { eventSource.close(); retryTimer = setTimeout(connect, 3000); };
 }
-applyCfg({}); resync(); connect();
+applyLook({}); resync(); connect();

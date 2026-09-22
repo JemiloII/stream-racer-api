@@ -33,7 +33,7 @@ test.describe("Roster components", () => {
     await expect(twitchCards).toHaveCount(server.settings.bots.length);
     // Resolution is async (/twitch/users); once done each card is either a real user with an avatar or marked missing.
     for (const twitchCard of await twitchCards.all()) {
-      await expect(twitchCard.locator("img, .card.bad .lg")).toHaveCount(1);
+      await expect(twitchCard.locator("img").or(twitchCard.filter({ hasText: "not on Twitch" }).locator(".lg"))).toHaveCount(1);
     }
     const resolvedOrMissing = twitchCards.filter({ has: page.locator("img") }).or(twitchCards.filter({ hasText: "not on Twitch" }));
     await expect(resolvedOrMissing).toHaveCount(server.settings.bots.length);

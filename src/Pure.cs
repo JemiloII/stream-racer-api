@@ -5,7 +5,8 @@ using UnityEngine;
 namespace StreamRacerApi;
 
 // Logic with no game or engine-runtime dependency (Vector3/Mathf are plain managed math), so it runs in unit tests.
-// Game.cs / Minimap.cs / Updates.cs call into here; tests live in tests/unit.
+// Game/*.cs, Minimap.cs and Updates.cs call into here; tests live in tests/unit. Compiled on its own by the test
+// project, so it keeps its own usings and never touches GameNames.
 public static class Pure
 {
     // ---- boost zones ----
@@ -17,15 +18,15 @@ public static class Pure
         var zones = new List<float[]>();
         if (length <= 0 || sample == null) return zones;
         float zoneStart = -1f;
-        for (float d = 0; d + look < length; d += step)
+        for (float distance = 0; distance + look < length; distance += step)
         {
-            var a = sample(d); var b = sample(d + look);
-            var da = a.dir; da.y = 0; var db = b.dir; db.y = 0;
-            float turn = Vector3.Angle(da, db);
-            float slope = Mathf.Abs(b.pos.y - a.pos.y) / look;
+            var here = sample(distance); var ahead = sample(distance + look);
+            var hereDirection = here.dir; hereDirection.y = 0; var aheadDirection = ahead.dir; aheadDirection.y = 0;
+            float turn = Vector3.Angle(hereDirection, aheadDirection);
+            float slope = Mathf.Abs(ahead.pos.y - here.pos.y) / look;
             bool straight = turn < maxTurn && slope < maxSlope;
-            if (straight && zoneStart < 0) zoneStart = d;
-            if (!straight && zoneStart >= 0) { if (d - zoneStart >= minLen) zones.Add(new[] { zoneStart, d + look * 0.5f }); zoneStart = -1f; }
+            if (straight && zoneStart < 0) zoneStart = distance;
+            if (!straight && zoneStart >= 0) { if (distance - zoneStart >= minLen) zones.Add(new[] { zoneStart, distance + look * 0.5f }); zoneStart = -1f; }
         }
         if (zoneStart >= 0 && length - zoneStart >= minLen) zones.Add(new[] { zoneStart, length });
         return zones;
@@ -33,43 +34,44 @@ public static class Pure
 
     public static bool InZone(IEnumerable<float[]> zones, float progress, float tail = 20f)
     {
-        foreach (var z in zones) if (progress >= z[0] && progress <= z[1] - tail) return true; // not right at the end of a straight
+        foreach (var zone in zones) if (progress >= zone[0] && progress <= zone[1] - tail) return true; // not right at the end of a straight
         return false;
     }
 
     // ---- versions ----
     // "1.2.10" vs "1.2.9" -> 1; missing parts count as 0; non-numeric parts count as 0.
-    public static int CompareVersions(string a, string b)
+    public static int CompareVersions(string left, string right)
     {
-        var pa = (a ?? "0").Split('.'); var pb = (b ?? "0").Split('.');
-        for (int i = 0; i < Math.Max(pa.Length, pb.Length); i++)
+        var leftParts = (left ?? "0").Split('.'); var rightParts = (right ?? "0").Split('.');
+        for (int i = 0; i < Math.Max(leftParts.Length, rightParts.Length); i++)
         {
-            int x = i < pa.Length && int.TryParse(pa[i], out var vx) ? vx : 0, y = i < pb.Length && int.TryParse(pb[i], out var vy) ? vy : 0;
-            if (x != y) return x.CompareTo(y);
+            int leftPart = i < leftParts.Length && int.TryParse(leftParts[i], out var parsedLeft) ? parsedLeft : 0;
+            int rightPart = i < rightParts.Length && int.TryParse(rightParts[i], out var parsedRight) ? parsedRight : 0;
+            if (leftPart != rightPart) return leftPart.CompareTo(rightPart);
         }
         return 0;
     }
 
     // ---- mini map ----
     // "16:9", "4:3", "1:1", "21:9" -> width/height; anything else (e.g. "auto") -> the track's own ratio.
-    public static float AspectRatio(string a, float track)
+    public static float AspectRatio(string aspect, float trackAspect)
     {
-        var p = (a ?? "").Trim().ToLowerInvariant().Split(':');
-        if (p.Length == 2 && float.TryParse(p[0], out var w) && float.TryParse(p[1], out var h) && w > 0 && h > 0) return w / h;
-        return track;
+        var parts = (aspect ?? "").Trim().ToLowerInvariant().Split(':');
+        if (parts.Length == 2 && float.TryParse(parts[0], out var width) && float.TryParse(parts[1], out var height) && width > 0 && height > 0) return width / height;
+        return trackAspect;
     }
 
     // In-game map box height (screen fraction) for a width fraction, the screen size and the wanted ratio.
-    public static float MapHeight(float w, float screenW, float screenH, float aspect) =>
-        Mathf.Clamp(w * screenW / screenH / Mathf.Max(0.01f, aspect), 0.03f, 0.95f);
+    public static float MapHeight(float widthFraction, float screenWidth, float screenHeight, float aspect) =>
+        Mathf.Clamp(widthFraction * screenWidth / screenHeight / Mathf.Max(0.01f, aspect), 0.03f, 0.95f);
 
     // ---- colors ----
     public static readonly string[] Palette = { "#ff3b30", "#ffd400", "#35e0ff", "#b07cff", "#3ddc84", "#ff8c42", "#ff5fa2", "#7ae7ff", "#c8ff4d", "#ff7a7a" };
     // Stable pick per login so a bot keeps its color between races.
     public static string AutoColorHex(string login)
     {
-        uint h = 2166136261; foreach (char c in (login ?? "").ToLowerInvariant()) h = unchecked((h ^ c) * 16777619); // FNV-1a: spreads similar names apart
-        return Palette[(int)(h % (uint)Palette.Length)];
+        uint hash = 2166136261; foreach (char character in (login ?? "").ToLowerInvariant()) hash = unchecked((hash ^ character) * 16777619); // FNV-1a: spreads similar names apart
+        return Palette[(int)(hash % (uint)Palette.Length)];
     }
 
     // ---- respawns ----
@@ -80,18 +82,18 @@ public static class Pure
     // "!race color red" with command "!race color" -> "red"; null when it isn't that command.
     public static string CommandArg(string message, string command)
     {
-        string cmd = (command ?? "").Trim(); if (cmd.Length == 0 || string.IsNullOrEmpty(message)) return null;
-        string m = message.Trim();
-        if (!m.StartsWith(cmd, StringComparison.OrdinalIgnoreCase)) return null;
-        if (m.Length > cmd.Length && !char.IsWhiteSpace(m[cmd.Length])) return null; // "!race colorful" is not "!race color"
-        return m.Substring(cmd.Length).Trim();
+        string prefix = (command ?? "").Trim(); if (prefix.Length == 0 || string.IsNullOrEmpty(message)) return null;
+        string text = message.Trim();
+        if (!text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return null;
+        if (text.Length > prefix.Length && !char.IsWhiteSpace(text[prefix.Length])) return null; // "!race colorful" is not "!race color"
+        return text.Substring(prefix.Length).Trim();
     }
 
     // Several aliases: the first one that matches wins ("!race respawn|!respawn"). Null when none does.
     public static string CommandArg(string message, IEnumerable<string> commands)
     {
         if (commands == null) return null;
-        foreach (var c in commands) { var a = CommandArg(message, c); if (a != null) return a; }
+        foreach (var command in commands) { var argument = CommandArg(message, command); if (argument != null) return argument; }
         return null;
     }
 
@@ -99,7 +101,7 @@ public static class Pure
     public static List<string> CommandAliases(string list)
     {
         var result = new List<string>();
-        foreach (var part in (list ?? "").Split('|', ',')) { var t = part.Trim(); if (t.Length > 0) result.Add(t); }
+        foreach (var part in (list ?? "").Split('|', ',')) { var alias = part.Trim(); if (alias.Length > 0) result.Add(alias); }
         return result;
     }
 
@@ -125,12 +127,12 @@ public static class Pure
     public static (int count, List<string> reasons) ExtraBoosts(int boostFollower, int boostSubscriber, int boostDeveloper, int boostHost,
         bool isFollower, bool isSub, bool isDev, bool isHost)
     {
-        int n = 0; var why = new List<string>();
-        if (isFollower && boostFollower != 0) { n += boostFollower; why.Add("follower"); }
-        if (isSub && boostSubscriber != 0) { n += boostSubscriber; why.Add("sub"); }
-        if (isDev && boostDeveloper != 0) { n += boostDeveloper; why.Add("dev"); }
-        if (isHost && boostHost != 0) { n += boostHost; why.Add("host"); }
-        return (n, why);
+        int count = 0; var reasons = new List<string>();
+        if (isFollower && boostFollower != 0) { count += boostFollower; reasons.Add("follower"); }
+        if (isSub && boostSubscriber != 0) { count += boostSubscriber; reasons.Add("sub"); }
+        if (isDev && boostDeveloper != 0) { count += boostDeveloper; reasons.Add("dev"); }
+        if (isHost && boostHost != 0) { count += boostHost; reasons.Add("host"); }
+        return (count, reasons);
     }
 
     // Why a follower boost may be missing: "ok" (checks can run), "no token" (nothing pasted on the Settings page,
@@ -145,10 +147,10 @@ public static class Pure
     // Twitch tokens are pasted in every shape: "oauth:abc", "Bearer abc", "abc". Keep the bare token.
     public static string CleanToken(string token)
     {
-        var t = (token ?? "").Trim();
+        var cleaned = (token ?? "").Trim();
         foreach (var prefix in new[] { "oauth:", "bearer " })
-            if (t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) t = t.Substring(prefix.Length).Trim();
-        return t;
+            if (cleaned.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) cleaned = cleaned.Substring(prefix.Length).Trim();
+        return cleaned;
     }
 
     // ---- camera director ----
@@ -157,14 +159,14 @@ public static class Pure
     // Director shot key -> toggle name: "high2" is a high shot, "front:login" a front shot, "wide:login" has no toggle ("wide").
     public static string ShotKind(string key)
     {
-        var k = (key ?? "").Split(':')[0].Trim().ToLowerInvariant();
-        return k == "high2" ? "high" : k;
+        var kind = (key ?? "").Split(':')[0].Trim().ToLowerInvariant();
+        return kind == "high2" ? "high" : kind;
     }
 
     // Missing toggle = enabled: an old settings file (or a partial PUT) never switches a shot off by accident.
     public static bool ShotEnabled(IDictionary<string, bool> shots, string key)
     {
         var kind = ShotKind(key);
-        return shots == null || !shots.TryGetValue(kind, out var on) || on;
+        return shots == null || !shots.TryGetValue(kind, out var enabled) || enabled;
     }
 }

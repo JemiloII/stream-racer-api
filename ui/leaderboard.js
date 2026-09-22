@@ -2,31 +2,34 @@
 // The horizontal bar is its own source, /overlay. Look & feel comes from Settings → Overlay look → Leaderboard
 // (settings.overlay.board / boardSide / boardScale, live); query params override:
 // ?token=  &rows=10 (0 = off)  &side=left|right  &scale=1  &accent=%23ff8a00
-import { createFeed, DEFAULTS, query, esc, pic } from "./overlay-shared.js";
+import { query } from "./lib/query.js";
+import { OVERLAY_DEFAULTS } from "./lib/defaults.js";
+import { escapeHtml } from "./lib/text.js";
+import { createFeed, avatarHtml } from "./overlay-shared.js";
 
-let cfg = { ...DEFAULTS };
-function applyCfg(saved) {
-  cfg = { ...saved };
-  if (query.get("rows") != null) cfg.board = +query.get("rows");
-  if (query.get("side")) cfg.boardSide = query.get("side");
-  if (query.get("scale")) cfg.boardScale = +query.get("scale");
-  if (query.get("accent")) cfg.accent = query.get("accent");
-  const root = document.documentElement.style;
-  root.setProperty("--hazard", cfg.accent); root.setProperty("--side", cfg.side + "px"); root.setProperty("--board-scale", cfg.boardScale);
-  document.body.classList.toggle("board-right", cfg.boardSide === "right");
+let look = { ...OVERLAY_DEFAULTS };
+function applyLook(saved) {
+  look = { ...saved };
+  if (query.get("rows") != null) look.board = +query.get("rows");
+  if (query.get("side")) look.boardSide = query.get("side");
+  if (query.get("scale")) look.boardScale = +query.get("scale");
+  if (query.get("accent")) look.accent = query.get("accent");
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty("--hazard", look.accent); rootStyle.setProperty("--side", look.side + "px"); rootStyle.setProperty("--board-scale", look.boardScale);
+  document.body.classList.toggle("board-right", look.boardSide === "right");
   render();
 }
 
-const $board = document.getElementById("board");
+const boardElement = document.getElementById("board");
 const feed = createFeed();
-feed.on("snapshot", render).on("pos", render).on("phase", render).on("settings", applyCfg);
+feed.on("snapshot", render).on("pos", render).on("phase", render).on("settings", applyLook);
 
 function render() {
-  const rows = cfg.board > 0 ? feed.vehicles().slice(0, cfg.board) : [];
-  $board.innerHTML = rows.map((r) => `
-    <div class="row" style="--c:${esc(r.color || "#fff")}"><span class="n">${r.place}</span>${pic(r)}
-      <span class="nm">${esc(r.displayName)}<small>${r.finished ? "FIN" : (r.pct || 0).toFixed(0) + "%"}</small></span></div>`).join("");
+  const rows = look.board > 0 ? feed.vehicles().slice(0, look.board) : [];
+  boardElement.innerHTML = rows.map((racer) => `
+    <div class="row" style="--c:${escapeHtml(racer.color || "#fff")}"><span class="n">${racer.place}</span>${avatarHtml(racer)}
+      <span class="nm">${escapeHtml(racer.displayName)}<small>${racer.finished ? "FIN" : (racer.pct || 0).toFixed(0) + "%"}</small></span></div>`).join("");
 }
 
-applyCfg(cfg);
+applyLook(look);
 feed.start();

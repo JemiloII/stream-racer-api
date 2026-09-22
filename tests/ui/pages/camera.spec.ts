@@ -2,7 +2,7 @@ import { test, expect, card } from "../fixtures/test";
 import { expectShell } from "../fixtures/shell";
 
 const SHOTS = ["Wide follow", "Grid", "Pack", "Sweep", "Side", "High", "Front leader", "Chase leader", "Orbit leader", "Track cam", "Overhead", "Boom cam", "Game follow", "Free"];
-// settings.camera.shots keys and the labels the page gives them (ui/pages/camera.js DIRECTOR_SHOTS).
+// settings.camera.shots keys and the labels the page gives them (ui/pages/camera/DirectorShots.js DIRECTOR_SHOTS).
 const DIRECTOR_SHOTS: Array<[key: string, label: string]> = [
   ["grid", "Grid start"], ["high", "High overview"], ["side", "Side"], ["sweep", "Sweep"], ["pack", "Pack"], ["front", "Front leader"], ["chase", "Chase leader"],
   ["orbit", "Orbit"], ["overhead", "Overhead"], ["prop", "Track cams"], ["finish", "Finish cam"], ["duel", "Duel"], ["pileup", "Pile-up"], ["boom", "Boom orbit"],

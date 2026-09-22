@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { get } from '../support/apiClient';
 import type { ScreenState } from '../support/apiTypes';
@@ -30,7 +30,11 @@ describe('GET /events', () => {
 describe('event catalogue', () => {
   const root = new URL('../../', import.meta.url);
   const source = (path: string) => readFileSync(new URL(path, root), 'utf8');
-  const sources = ['src/Game.cs', 'src/Patches.cs', 'src/Routes.cs', 'src/Camera.cs', 'src/Plugin.cs', 'src/Settings.cs'];
+  // every C# file under src/ (Game/ and Camera/ are partial classes split by concern)
+  const sources = readdirSync(new URL('src/', root), { recursive: true })
+    .map(String)
+    .filter((file) => file.endsWith('.cs'))
+    .map((file) => 'src/' + file.replace(/\\/g, '/'));
   const emitted = () => new Set([...sources.map(source).join('\n').matchAll(/Plugin\.Emit\("([a-z_]+)"/g)].map((match) => match[1]!));
   const documented = () => {
     const block = source('ui/pages/api.js').match(/const EVENTS = \[([\s\S]*?)\n\];/)?.[1] ?? '';

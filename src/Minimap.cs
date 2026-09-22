@@ -1,13 +1,9 @@
-using System.Collections.Generic;
-using System.Linq;
-using Cage.StreamRacer;
+// In-game picture-in-picture mini map, fully custom: a second orthographic camera that renders ONLY our
+// private layer, which holds a translucent backdrop, a line traced along the route, and one colored dot per car.
 using Newtonsoft.Json.Linq;
-using UnityEngine;
 
 namespace StreamRacerApi;
 
-// In-game picture-in-picture mini map, fully custom: a second orthographic camera that renders ONLY our
-// private layer, which holds a translucent backdrop, a line traced along the route, and one colored dot per car.
 static class Minimap
 {
     const int Layer = 30; // unused by the game
@@ -26,26 +22,26 @@ static class Minimap
     }
     public static Cfg Current = new();
 
-    static Camera _cam;
+    static Camera _camera;
     static Transform _backdrop;
     static LineRenderer _line;
-    static readonly Dictionary<CFBJLEBOFHJ, Transform> _markers = new();
-    static readonly Dictionary<CFBJLEBOFHJ, TextMesh> _labels = new();
+    static readonly Dictionary<Vehicle, Transform> _markers = new();
+    static readonly Dictionary<Vehicle, TextMesh> _labels = new();
     static Font _font;
-    static Material _mat;
+    static Material _material;
     static Bounds _bounds;
-    static float _half;
+    static float _halfHeight;
 
-    public static void Configure(JObject o) { Current = o?.ToObject<Cfg>() ?? new Cfg(); Apply(); }
+    public static void Configure(JObject config) { Current = config?.ToObject<Cfg>() ?? new Cfg(); Apply(); }
 
     public static object State => new
     {
         Current.enabled, Current.x, Current.y, Current.w, Current.h, Current.marker, Current.bg, Current.alpha, Current.track, Current.pad, Current.leaderBig, Current.names, Current.aspect,
-        live = _cam != null,
+        live = _camera != null,
     };
 
-    static Material Mat() => _mat ??= new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
-    static Color Parse(string hex, float alpha, Color fallback) { var c = ColorUtility.TryParseHtmlString(hex ?? "", out var p) ? p : fallback; c.a = alpha; return c; }
+    static Material BaseMaterial() => _material ??= new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
+    static Color Parse(string hex, float alpha, Color fallback) { var color = ColorUtility.TryParseHtmlString(hex ?? "", out var parsed) ? parsed : fallback; color.a = alpha; return color; }
 
     // Build or refresh everything from the config and the current track. Safe to call any time.
     public static void Apply()
@@ -54,169 +50,169 @@ static class Minimap
         var route = Game.TrackPoints();
         if (route.Count < 2) { Destroy(); return; }
         _bounds = new Bounds(route[0], Vector3.zero);
-        foreach (var p in route) _bounds.Encapsulate(p);
+        foreach (var point in route) _bounds.Encapsulate(point);
 
         float trackAspect = Mathf.Max(0.1f, _bounds.size.x) / Mathf.Max(0.1f, _bounds.size.z);
-        float h = Pure.MapHeight(Current.w, Screen.width, Screen.height, Pure.AspectRatio(Current.aspect, trackAspect)); // same ratio as the /minimap page
-        float boxAspect = (Current.w * Screen.width) / Mathf.Max(1f, h * Screen.height);
-        _half = Mathf.Max(_bounds.extents.z, _bounds.extents.x / boxAspect) * Current.pad + 2f;
+        float height = Pure.MapHeight(Current.w, Screen.width, Screen.height, Pure.AspectRatio(Current.aspect, trackAspect)); // same ratio as the /minimap page
+        float boxAspect = (Current.w * Screen.width) / Mathf.Max(1f, height * Screen.height);
+        _halfHeight = Mathf.Max(_bounds.extents.z, _bounds.extents.x / boxAspect) * Current.pad + 2f;
 
-        if (_cam == null)
+        if (_camera == null)
         {
-            var go = new GameObject("StreamRacerApi.Minimap");
-            _cam = go.AddComponent<Camera>();
-            _cam.orthographic = true;
-            _cam.clearFlags = CameraClearFlags.Depth;   // draw over the main view; our backdrop supplies the box
-            _cam.cullingMask = 1 << Layer;              // only our stuff
-            _cam.depth = Camera.main.depth + 5;
-            _cam.farClipPlane = 3000f;
+            var cameraObject = new GameObject("StreamRacerApi.Minimap");
+            _camera = cameraObject.AddComponent<Camera>();
+            _camera.orthographic = true;
+            _camera.clearFlags = CameraClearFlags.Depth;   // draw over the main view; our backdrop supplies the box
+            _camera.cullingMask = 1 << Layer;              // only our stuff
+            _camera.depth = Camera.main.depth + 5;
+            _camera.farClipPlane = 3000f;
             Camera.main.cullingMask &= ~(1 << Layer);
         }
-        _cam.rect = new Rect(Current.x, Current.y, Current.w, h);
-        _cam.orthographicSize = _half;
-        _cam.transform.position = new Vector3(_bounds.center.x, _bounds.max.y + 400f, _bounds.center.z);
-        _cam.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        _camera.rect = new Rect(Current.x, Current.y, Current.w, height);
+        _camera.orthographicSize = _halfHeight;
+        _camera.transform.position = new Vector3(_bounds.center.x, _bounds.max.y + 400f, _bounds.center.z);
+        _camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
         // backdrop: a quad far below everything, sized to the viewport
         if (_backdrop == null)
         {
-            var q = GameObject.CreatePrimitive(PrimitiveType.Quad); Object.Destroy(q.GetComponent<Collider>());
-            q.name = "SRMinimap.Backdrop"; q.layer = Layer; q.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            q.GetComponent<Renderer>().material = new Material(Mat());
-            _backdrop = q.transform;
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad); Object.Destroy(quad.GetComponent<Collider>());
+            quad.name = "SRMinimap.Backdrop"; quad.layer = Layer; quad.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            quad.GetComponent<Renderer>().material = new Material(BaseMaterial());
+            _backdrop = quad.transform;
         }
         _backdrop.position = new Vector3(_bounds.center.x, _bounds.min.y - 200f, _bounds.center.z);
-        _backdrop.localScale = new Vector3(_half * 2f * boxAspect + 10f, _half * 2f + 10f, 1f);
+        _backdrop.localScale = new Vector3(_halfHeight * 2f * boxAspect + 10f, _halfHeight * 2f + 10f, 1f);
         _backdrop.GetComponent<Renderer>().material.color = Parse(Current.bg, Mathf.Clamp01(Current.alpha), Color.black);
 
         // route line
         if (_line == null)
         {
-            var go = new GameObject("SRMinimap.Track"); go.layer = Layer;
-            _line = go.AddComponent<LineRenderer>();
-            _line.material = new Material(Mat());
+            var lineObject = new GameObject("SRMinimap.Track"); lineObject.layer = Layer;
+            _line = lineObject.AddComponent<LineRenderer>();
+            _line.material = new Material(BaseMaterial());
             _line.useWorldSpace = true; _line.loop = false;
             _line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; _line.receiveShadows = false;
             _line.numCornerVertices = 4; _line.numCapVertices = 4;
         }
         float lift = _bounds.max.y + 30f;
-        var pts = route.Select(p => new Vector3(p.x, lift, p.z)).ToArray();
-        _line.positionCount = pts.Length; _line.SetPositions(pts);
-        _line.startWidth = _line.endWidth = _half * 0.035f;
+        var linePoints = route.Select(point => new Vector3(point.x, lift, point.z)).ToArray();
+        _line.positionCount = linePoints.Length; _line.SetPositions(linePoints);
+        _line.startWidth = _line.endWidth = _halfHeight * 0.035f;
         _line.material.color = Parse(Current.track, 1f, Color.white);
     }
 
     // StartCurrentGame only kicks off a countdown; build once the race is really running.
     public static System.Collections.IEnumerator WhenRunning()
     {
-        for (float t = 0; t < 120f && !Game.Running; t += 0.5f) yield return new WaitForSeconds(0.5f);
+        for (float waited = 0; waited < 120f && !Game.Running; waited += 0.5f) yield return new WaitForSeconds(0.5f);
         yield return new WaitForSeconds(0.5f);
         Apply();
     }
 
     public static void Destroy()
     {
-        foreach (var m in _markers.Values) if (m != null) Object.Destroy(m.gameObject);
+        foreach (var marker in _markers.Values) if (marker != null) Object.Destroy(marker.gameObject);
         _markers.Clear();
-        foreach (var l in _labels.Values) if (l != null) Object.Destroy(l.gameObject);
+        foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject);
         _labels.Clear();
         if (_line != null) { Object.Destroy(_line.gameObject); _line = null; }
         if (_backdrop != null) { Object.Destroy(_backdrop.gameObject); _backdrop = null; }
-        if (_cam != null) { Object.Destroy(_cam.gameObject); _cam = null; }
+        if (_camera != null) { Object.Destroy(_camera.gameObject); _camera = null; }
     }
 
     // Per frame: one colored disc per car above the route line.
     public static void Tick()
     {
-        if (_cam == null) return;
+        if (_camera == null) return;
         // The game swaps cameras (prop cams, follow, free); none of them may draw our layer.
-        foreach (var c in Camera.allCameras) if (c != _cam && (c.cullingMask & (1 << Layer)) != 0) c.cullingMask &= ~(1 << Layer);
-        var alive = new HashSet<CFBJLEBOFHJ>();
+        foreach (var camera in Camera.allCameras) if (camera != _camera && (camera.cullingMask & (1 << Layer)) != 0) camera.cullingMask &= ~(1 << Layer);
+        var alive = new HashSet<Vehicle>();
         var leader = Cam.Leader();
         float lift = _bounds.max.y + 40f;
-        foreach (var v in Game.Vehicles())
+        foreach (var vehicle in Game.Vehicles())
         {
-            if (v.JPHIMKLIAAO == null) continue;
-            alive.Add(v);
-            if (!_markers.TryGetValue(v, out var m) || m == null) _markers[v] = m = MakeMarker(v);
-            float s = _half * 2f * Current.marker / 100f * (Current.leaderBig && v == leader ? 1.6f : 1f) * (v.NIKOEDJIAFB ? 0.6f : 1f);
-            var p = v.JPHIMKLIAAO.transform.position;
-            m.position = new Vector3(p.x, lift + (v == leader ? 1f : 0f), p.z);
-            m.localScale = new Vector3(s, s, s);
+            if (vehicle.Car() == null) continue;
+            alive.Add(vehicle);
+            if (!_markers.TryGetValue(vehicle, out var marker) || marker == null) _markers[vehicle] = marker = MakeMarker(vehicle);
+            float size = _halfHeight * 2f * Current.marker / 100f * (Current.leaderBig && vehicle == leader ? 1.6f : 1f) * (vehicle.HasFinished() ? 0.6f : 1f);
+            var position = vehicle.Car().transform.position;
+            marker.position = new Vector3(position.x, lift + (vehicle == leader ? 1f : 0f), position.z);
+            marker.localScale = new Vector3(size, size, size);
         }
-        foreach (var k in _markers.Keys.Where(k => !alive.Contains(k)).ToList()) { if (_markers[k] != null) Object.Destroy(_markers[k].gameObject); _markers.Remove(k); }
+        foreach (var gone in _markers.Keys.Where(vehicle => !alive.Contains(vehicle)).ToList()) { if (_markers[gone] != null) Object.Destroy(_markers[gone].gameObject); _markers.Remove(gone); }
         Labels(alive, lift);
     }
 
     // Names sit to the right of their dot (left if that would run off the map), pushed apart vertically so they never overlap.
-    static void Labels(HashSet<CFBJLEBOFHJ> alive, float lift)
+    static void Labels(HashSet<Vehicle> alive, float lift)
     {
-        if (!Current.names) { if (_labels.Count > 0) { foreach (var l in _labels.Values) if (l != null) Object.Destroy(l.gameObject); _labels.Clear(); } return; }
-        float size = _half * 2f * Current.marker / 100f;      // world units per dot
-        float lineH = size * 1.3f, charW = size * 0.62f, gap = size * 0.7f;
-        float viewW = _cam.orthographicSize * _cam.aspect, right = _bounds.center.x + viewW - size, left = _bounds.center.x - viewW + size;
-        float top = _bounds.center.z + _cam.orthographicSize - lineH * 0.6f, bottom = _bounds.center.z - _cam.orthographicSize + lineH * 0.6f;
+        if (!Current.names) { if (_labels.Count > 0) { foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject); _labels.Clear(); } return; }
+        float size = _halfHeight * 2f * Current.marker / 100f;      // world units per dot
+        float lineHeight = size * 1.3f, charWidth = size * 0.62f, gap = size * 0.7f;
+        float viewWidth = _camera.orthographicSize * _camera.aspect, right = _bounds.center.x + viewWidth - size, left = _bounds.center.x - viewWidth + size;
+        float top = _bounds.center.z + _camera.orthographicSize - lineHeight * 0.6f, bottom = _bounds.center.z - _camera.orthographicSize + lineHeight * 0.6f;
         var placed = new List<(float x0, float x1, float z)>();
-        foreach (var v in alive.OrderByDescending(v => v.JPHIMKLIAAO.transform.position.z))
+        foreach (var vehicle in alive.OrderByDescending(vehicle => vehicle.Car().transform.position.z))
         {
-            if (!_labels.TryGetValue(v, out var tm) || tm == null) _labels[v] = tm = MakeLabel(v);
-            var p = v.JPHIMKLIAAO.transform.position;
-            string txt = v.JDDOIMHIFHK.AMCIKHEHBGM ?? Game.Login(v);
-            float w = txt.Length * charW;
-            bool flip = p.x + gap + w > right;               // would run off the right edge -> put it on the left
-            float x0 = flip ? p.x - gap - w : p.x + gap, x1 = x0 + w;
-            float z = Mathf.Clamp(p.z, bottom, top);
+            if (!_labels.TryGetValue(vehicle, out var label) || label == null) _labels[vehicle] = label = MakeLabel(vehicle);
+            var position = vehicle.Car().transform.position;
+            string text = vehicle.Profile().DisplayName() ?? Game.Login(vehicle);
+            float width = text.Length * charWidth;
+            bool flip = position.x + gap + width > right;               // would run off the right edge -> put it on the left
+            float x0 = flip ? position.x - gap - width : position.x + gap, x1 = x0 + width;
+            float z = Mathf.Clamp(position.z, bottom, top);
             bool moved = true; int guard = 0;
             while (moved && guard++ < 20)
             {
                 moved = false;
-                foreach (var o in placed)
-                    if (x0 < o.x1 && x1 > o.x0 && Mathf.Abs(z - o.z) < lineH) { z = o.z - lineH; moved = true; }
+                foreach (var other in placed)
+                    if (x0 < other.x1 && x1 > other.x0 && Mathf.Abs(z - other.z) < lineHeight) { z = other.z - lineHeight; moved = true; }
             }
             placed.Add((x0, x1, z));
-            tm.text = txt;
-            tm.color = v.JDDOIMHIFHK.EKPDDGFGLNI;
-            tm.anchor = flip ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
-            tm.alignment = flip ? TextAlignment.Right : TextAlignment.Left;
-            tm.characterSize = size * 0.32f;
-            tm.transform.position = new Vector3(flip ? p.x - gap : p.x + gap, lift + 2f, z);
+            label.text = text;
+            label.color = vehicle.Profile().Color();
+            label.anchor = flip ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+            label.alignment = flip ? TextAlignment.Right : TextAlignment.Left;
+            label.characterSize = size * 0.32f;
+            label.transform.position = new Vector3(flip ? position.x - gap : position.x + gap, lift + 2f, z);
         }
-        foreach (var k in _labels.Keys.Where(k => !alive.Contains(k)).ToList()) { if (_labels[k] != null) Object.Destroy(_labels[k].gameObject); _labels.Remove(k); }
+        foreach (var gone in _labels.Keys.Where(vehicle => !alive.Contains(vehicle)).ToList()) { if (_labels[gone] != null) Object.Destroy(_labels[gone].gameObject); _labels.Remove(gone); }
     }
 
-    static TextMesh MakeLabel(CFBJLEBOFHJ v)
+    static TextMesh MakeLabel(Vehicle vehicle)
     {
         _font ??= Resources.GetBuiltinResource<Font>("Arial.ttf") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        var go = new GameObject("SRMinimap.Label." + Game.Login(v)) { layer = Layer };
-        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        var tm = go.AddComponent<TextMesh>();
-        tm.font = _font; tm.fontSize = 48; tm.anchor = TextAnchor.MiddleLeft; tm.alignment = TextAlignment.Left;
-        tm.color = Color.white; tm.fontStyle = FontStyle.Bold;
-        var r = go.GetComponent<MeshRenderer>();
-        r.material = _font.material; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; r.receiveShadows = false;
-        return tm;
+        var labelObject = new GameObject("SRMinimap.Label." + Game.Login(vehicle)) { layer = Layer };
+        labelObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        var label = labelObject.AddComponent<TextMesh>();
+        label.font = _font; label.fontSize = 48; label.anchor = TextAnchor.MiddleLeft; label.alignment = TextAlignment.Left;
+        label.color = Color.white; label.fontStyle = FontStyle.Bold;
+        var renderer = labelObject.GetComponent<MeshRenderer>();
+        renderer.material = _font.material; renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
+        return label;
     }
 
-    static Transform MakeMarker(CFBJLEBOFHJ v)
+    static Transform MakeMarker(Vehicle vehicle)
     {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Quad); Object.Destroy(go.GetComponent<Collider>());
-        go.name = "SRMinimap." + Game.Login(v); go.layer = Layer;
-        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        var r = go.GetComponent<Renderer>();
-        r.material = new Material(Mat()) { color = v.JDDOIMHIFHK.EKPDDGFGLNI, mainTexture = Disc() };
-        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; r.receiveShadows = false;
-        return go.transform;
+        var markerObject = GameObject.CreatePrimitive(PrimitiveType.Quad); Object.Destroy(markerObject.GetComponent<Collider>());
+        markerObject.name = "SRMinimap." + Game.Login(vehicle); markerObject.layer = Layer;
+        markerObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        var renderer = markerObject.GetComponent<Renderer>();
+        renderer.material = new Material(BaseMaterial()) { color = vehicle.Profile().Color(), mainTexture = Disc() };
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
+        return markerObject.transform;
     }
 
     static Texture2D _disc;
     static Texture2D Disc()
     {
         if (_disc != null) return _disc;
-        const int n = 64; _disc = new Texture2D(n, n, TextureFormat.RGBA32, false);
-        for (int y = 0; y < n; y++) for (int x = 0; x < n; x++)
+        const int size = 64; _disc = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
         {
-            float d = Vector2.Distance(new Vector2(x + .5f, y + .5f), new Vector2(n / 2f, n / 2f)) / (n / 2f);
-            _disc.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01((1f - d) * 8f)));
+            float distance = Vector2.Distance(new Vector2(x + .5f, y + .5f), new Vector2(size / 2f, size / 2f)) / (size / 2f);
+            _disc.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01((1f - distance) * 8f)));
         }
         _disc.Apply();
         return _disc;

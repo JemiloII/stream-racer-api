@@ -1,0 +1,162 @@
+// Game.Vehicles: who is in the race. Vehicle lookup, the streamer, the JSON shapes (Dto / Snapshot / PosFrame),
+// what each car is doing (StateOf) and the crash tracking built on it. Obfuscated members come in through
+// GameNames.cs only; a game update that renames one makes the affected route throw and return 501.
+using HarmonyLib;
+using UnityStandardAssets.Vehicles.Car;
+
+namespace StreamRacerApi;
+
+static partial class Game
+{
+    static readonly System.Reflection.FieldInfo FinishAtField = AccessTools.Field(typeof(Vehicle), GameNames.VehicleFinishAt);
+
+    public static float FinishAt(Vehicle vehicle) => (float)FinishAtField.GetValue(vehicle);
+
+    // The game's own Twitch app token (Helix-capable) and client id, so we can resolve logins without another auth flow.
+    public static string TwitchToken => Instances.Backend?.CurrentUser()?.AccessToken();
+    public static string TwitchClientId => Instances.TwitchClientId;
+
+    public static string StreamerId => Instances.Backend?.CurrentUser()?.Id();
+    public static string StreamerLogin => Instances.Backend?.CurrentUser()?.Login();
+    public static Vehicle StreamerVehicle() =>
+        Vehicles().FirstOrDefault(vehicle => vehicle.Profile().TwitchId() == StreamerId || vehicle.Profile().Login() == StreamerLogin);
+
+    public static bool Running => Instances.GameController != null && Instances.GameController.IsGameRunning();
+
+    public static List<Vehicle> Vehicles() =>
+        Instances.VehicleManager == null ? new List<Vehicle>() : Instances.VehicleManager.GetVehicles();
+
+    // Same ordering the in-game leaderboard uses: progress descending, finishers get bumped high.
+    public static List<Vehicle> Ranked() => Vehicles().OrderByDescending(vehicle => vehicle.Progress()).ToList();
+
+    public static Vehicle Find(string idOrLogin) =>
+        Vehicles().FirstOrDefault(vehicle => vehicle.Profile().TwitchId() == idOrLogin || vehicle.Profile().Login() == idOrLogin);
+
+    public static string Login(Vehicle vehicle) => vehicle.Profile().Login();
+    public static string DisplayName(Vehicle vehicle) => vehicle.Profile().DisplayName();
+
+    // What the lobby row prints under the name: backend CustomTitle ("Developer", "Streamer", ...) else Subscriber / Normal Racer.
+    public static string Title(Vehicle vehicle) => vehicle.Profile().Title();
+
+    static float ProgressPercent(Vehicle vehicle) =>
+        vehicle.HasFinished() ? 100f : Mathf.Clamp(vehicle.Progress() / Mathf.Max(1f, FinishAt(vehicle)) * 100f, 0f, 100f);
+
+    public static object Dto(Vehicle vehicle, int place)
+    {
+        var profile = vehicle.Profile();
+        var car = vehicle.Car();
+        return new
+        {
+            place,
+            id = profile.TwitchId(),
+            login = profile.Login(),
+            displayName = profile.DisplayName(),
+            color = "#" + ColorUtility.ToHtmlStringRGB(profile.Color()),
+            sub = profile.IsSubscriber(),
+            type = vehicle.Type().ToString(),
+            progress = vehicle.Progress(),
+            finishAt = FinishAt(vehicle),
+            pct = ProgressPercent(vehicle),
+            finished = vehicle.HasFinished(),
+            boosts = Boosts(vehicle),
+            respawns = RespawnsLeft(profile.Login()),
+            state = StateOf(vehicle).ToApiString(),
+            image = Images.TryGetValue(profile.Login() ?? "", out var image) ? image : null,
+            avatar = Avatar(vehicle),
+            title = Title(vehicle),
+            x = car != null ? (float?)car.transform.position.x : null,
+            z = car != null ? (float?)car.transform.position.z : null,
+        };
+    }
+
+    public static object EventDto(Vehicle vehicle) => Dto(vehicle, Ranked().IndexOf(vehicle) + 1);
+
+    // Tiny per-frame payload for maps/overlays: [login, x, z, pct, place, finished, state] per car.
+    public static object PosFrame()
+    {
+        var ranked = Ranked();
+        var frame = new List<object[]>(ranked.Count);
+        for (int i = 0; i < ranked.Count; i++)
+        {
+            var vehicle = ranked[i];
+            var position = vehicle.Car() != null ? vehicle.Car().transform.position : Vector3.zero;
+            frame.Add(new object[]
+            {
+                Login(vehicle), Mathf.Round(position.x * 10f) / 10f, Mathf.Round(position.z * 10f) / 10f, Mathf.Round(ProgressPercent(vehicle) * 10f) / 10f,
+                i + 1, vehicle.HasFinished() ? 1 : 0, StateOf(vehicle).ToApiString(),
+            });
+        }
+        return new { t = Time.unscaledTime, v = frame };
+    }
+
+    public static object Snapshot()
+    {
+        var ranked = Ranked();
+        var game = Instances.GameController?.CurrentGame();
+        return new
+        {
+            running = Running, lobby = InLobby, streamer = StreamerLogin,
+            map = game == null ? null : new { id = game.MapId(), name = game.MapName() },
+            vehicles = ranked.Select((vehicle, index) => Dto(vehicle, index + 1)).ToList(),
+        };
+    }
+
+    // ---- vehicle state ----
+
+    // A car is "on the road" when it sits within 18 units of where the route says its progress is.
+    static bool IsOffRoad(Vehicle vehicle, Transform carTransform)
+    {
+        var circuit = Instances.WaypointController?.GetCircuit();
+        if (circuit == null) return false;
+        var routePosition = circuit.GetRoutePoint(vehicle.Progress()).Position();
+        return Vector2.Distance(new Vector2(routePosition.x, routePosition.z), new Vector2(carTransform.position.x, carTransform.position.z)) > 18f;
+    }
+
+    public static VehicleState StateOf(Vehicle vehicle)
+    {
+        if (vehicle.HasFinished()) return VehicleState.Finished;
+        if (vehicle.Car() == null) return VehicleState.Spawning;
+        if (IsBoomed(vehicle)) return VehicleState.Stunned;
+        var carTransform = vehicle.Car().transform;
+        if (Vector3.Dot(carTransform.up, Vector3.up) < 0.5f) return VehicleState.Flipped;
+        var body = vehicle.Car().GetComponent<Rigidbody>();
+        bool grounded = Physics.Raycast(carTransform.position + Vector3.up * 0.5f, Vector3.down, 2.5f);
+        if (!grounded || (body != null && Mathf.Abs(body.velocity.y) > 4f)) return VehicleState.Air;
+        if (IsOffRoad(vehicle, carTransform)) return VehicleState.Offroad;
+        var ai = vehicle.Car().GetComponent<CarAIControl>();
+        if (Running && ai != null && ai.IsDriving() && body != null && body.velocity.magnitude < 0.5f && Time.time - _runningSince > 10f) return VehicleState.Stuck;
+        return VehicleState.Driving;
+    }
+    static float _runningSince = -1f; static bool _wasRunning;
+
+    // Crash tracking: a car leaving "driving" for flipped/offroad/stuck (not a boom, not a jump) for > 1 s is a crash;
+    // back to driving is a recovery. Emitted as SSE "crash" / "recovered"; recent crashes feed the director's pile-up rule.
+    static readonly Dictionary<Vehicle, float> _badSince = new();
+    public static readonly Dictionary<Vehicle, float> CrashedAt = new(); // still-crashed cars -> when
+    static float _nextStateScan;
+    public static void TrackStates()
+    {
+        if (Time.unscaledTime < _nextStateScan) return; _nextStateScan = Time.unscaledTime + 0.25f;
+        if (!Running) { _wasRunning = false; _badSince.Clear(); CrashedAt.Clear(); return; }
+        if (!_wasRunning) { _wasRunning = true; _runningSince = Time.time; } // the green light, not the countdown
+        foreach (var vehicle in Vehicles())
+        {
+            var state = StateOf(vehicle);
+            bool bad = state.IsCrashed();
+            if (bad) { if (!_badSince.ContainsKey(vehicle)) _badSince[vehicle] = Time.time; }
+            else _badSince.Remove(vehicle);
+            bool crashed = CrashedAt.ContainsKey(vehicle);
+            float needed = state == VehicleState.Stuck ? 4f : 1f; // a stall needs longer to count than a flip
+            if (!crashed && bad && Time.time - _badSince[vehicle] > needed)
+            {
+                CrashedAt[vehicle] = Time.time;
+                Plugin.Emit("crash", new { login = Login(vehicle), displayName = DisplayName(vehicle), state = state.ToApiString(), place = Ranked().IndexOf(vehicle) + 1, pileup = CrashedAt.Values.Count(at => Time.time - at < 8f) });
+            }
+            else if (crashed && state is VehicleState.Driving or VehicleState.Finished or VehicleState.Stunned)
+            {
+                CrashedAt.Remove(vehicle);
+                Plugin.Emit("recovered", new { login = Login(vehicle), displayName = DisplayName(vehicle), place = Ranked().IndexOf(vehicle) + 1 });
+            }
+        }
+    }
+}

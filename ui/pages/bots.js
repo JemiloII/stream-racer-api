@@ -1,106 +1,77 @@
-import { useState } from "react";
-import { html, useStore, useCss, api } from "../store.js";
-import { TwitchLookup, Card, Grid, Empty, useTwitchUsers, readFile } from "../components/roster.js";
-
-// One roster: Twitch bots (resolved live) and custom bots (your own login + picture) side by side.
+// Bots page: one roster of Twitch bots (resolved live) and custom bots (your own login + picture) side by side.
 // Card tools: ★ auto-join every lobby · ↯ auto-boost (off = a third party drives its pool via the API) · ✕ remove.
 // Badges say what's on. Custom and auto-join bots sort first.
+import { useState } from "react";
+import { html, useCss } from "../lib/html.js";
+import { api } from "../lib/api.js";
+import { readFileAsDataUrl } from "../lib/files.js";
+import { useStore } from "../store.js";
+import { TwitchLookup, Grid, Empty, useTwitchUsers } from "../components/roster.js";
+import AddCustomBotForm from "./bots/AddCustomBotForm.js";
+import BotCard from "./bots/BotCard.js";
 
-function AddCustom({ onAdd }) {
-  const [login, setLogin] = useState(""), [name, setName] = useState(""), [color, setColor] = useState("#35e0ff"), [autoColor, setAutoColor] = useState(true), [image, setImage] = useState(""), [file, setFile] = useState(null), [busy, setBusy] = useState(false);
-  const add = async () => {
-    const l = login.trim().toLowerCase().replace(/[^a-z0-9_]/g, ""); if (!l) return;
-    setBusy(true);
-    let img = image.trim();
-    if (file) { const r = await api(`/image/${l}`, { method: "PUT", body: { data: await readFile(file) } }); if (r?.path) img = r.path; }
-    await onAdd({ id: "", login: l, displayName: name.trim() || login.trim(), color: autoColor ? null : color, image: img || null });
-    setLogin(""); setName(""); setImage(""); setFile(null); setBusy(false);
-  };
-  return html`
-    <div class="cbform">
-      <label>Custom bot login<input placeholder="my_bot" value=${login} onInput=${(e) => setLogin(e.target.value)} /></label>
-      <label>Display name<input placeholder="My Bot" value=${name} onInput=${(e) => setName(e.target.value)} /></label>
-      <label>Color
-        <div class="colorrow">
-          <button class=${"secondary" + (autoColor ? " on" : "")} onClick=${() => setAutoColor(!autoColor)} title="pick one automatically">auto</button>
-          <input type="color" value=${color} disabled=${autoColor} onInput=${(e) => setColor(e.target.value)} />
-        </div>
-      </label>
-      <label>Picture
-        <label class="filebtn"><span>${file ? file.name : "Choose file…"}</span><input type="file" accept="image/*" hidden onChange=${(e) => setFile(e.target.files[0] || null)} /></label>
-      </label>
-      <label>…or image URL / path<input placeholder="https://… or C:/…/bot.png" value=${image} onInput=${(e) => setImage(e.target.value)} /></label>
-      <button disabled=${busy || !login.trim()} aria-busy=${busy} onClick=${add}>Add custom</button>
-    </div>`;
-}
-
-export default function Bots() {
+export default function BotsPage() {
   useCss("pages/bots.css");
-  const { snap, settings, saveSettings } = useStore();
-  const logins = settings.bots || [];
-  const custom = settings.customBots || [];
-  const opts = settings.botOptions || {};
-  const ajLogins = new Set((settings.autoJoin || []).map((e) => e.login));
-  const inLobby = new Set(snap.vehicles.map((v) => v.login));
-  const users = useTwitchUsers(logins);
-  const [picked, setPicked] = useState(new Set());
+  const { snapshot, settings, saveSettings } = useStore();
+  const twitchLogins = settings.bots || [];
+  const customBots = settings.customBots || [];
+  const botOptions = settings.botOptions || {};
+  const autoJoinLogins = new Set((settings.autoJoin || []).map((entry) => entry.login));
+  const lobbyLogins = new Set(snapshot.vehicles.map((vehicle) => vehicle.login));
+  const twitchUsers = useTwitchUsers(twitchLogins);
+  const [pickedLogins, setPickedLogins] = useState(new Set());
 
   const roster = [
-    ...custom.map((b) => ({ kind: "custom", ...b })),
-    ...logins.map((l) => { const u = users[l] || {}; return { kind: "twitch", login: l, id: u.id || "", displayName: u.displayName || l, color: null, image: u.image || null, missing: !!u.missing }; }),
-  ].map((r, i) => ({ ...r, i })).sort((a, b) => (b.kind === "custom") - (a.kind === "custom") || ajLogins.has(b.login) - ajLogins.has(a.login) || a.i - b.i);
-  const autoBoost = (login) => opts[login]?.autoBoost !== false;
-  const entryOf = (r) => ({ id: r.id || "", login: r.login, displayName: r.displayName, color: r.color || null, sub: false, image: r.kind === "custom" ? r.image : null, autoBoost: autoBoost(r.login) });
+    ...customBots.map((bot) => ({ kind: "custom", ...bot })),
+    ...twitchLogins.map((login) => { const user = twitchUsers[login] || {}; return { kind: "twitch", login, id: user.id || "", displayName: user.displayName || login, color: null, image: user.image || null, missing: !!user.missing }; }),
+  ].map((bot, index) => ({ ...bot, index })).sort((a, b) => (b.kind === "custom") - (a.kind === "custom") || autoJoinLogins.has(b.login) - autoJoinLogins.has(a.login) || a.index - b.index);
+  const autoBoostOf = (login) => botOptions[login]?.autoBoost !== false;
+  // What a bot becomes on the auto-join list / in a POST /join body.
+  const joinEntryOf = (bot) => ({ id: bot.id || "", login: bot.login, displayName: bot.displayName, color: bot.color || null, sub: false, image: bot.kind === "custom" ? bot.image : null, autoBoost: autoBoostOf(bot.login) });
 
-  const toggleAutoJoin = (r) => { const list = settings.autoJoin || []; saveSettings({ autoJoin: ajLogins.has(r.login) ? list.filter((e) => e.login !== r.login) : [...list, entryOf(r)] }); };
-  const toggleAutoBoost = (r) => saveSettings({ botOptions: { ...opts, [r.login]: { autoBoost: !autoBoost(r.login) } } });
-  const remove = (r) => saveSettings({
-    bots: r.kind === "twitch" ? logins.filter((l) => l !== r.login) : logins,
-    customBots: r.kind === "custom" ? custom.filter((b) => b.login !== r.login) : custom,
-    autoJoin: (settings.autoJoin || []).filter((e) => e.login !== r.login),
+  const toggleAutoJoin = (bot) => { const list = settings.autoJoin || []; saveSettings({ autoJoin: autoJoinLogins.has(bot.login) ? list.filter((entry) => entry.login !== bot.login) : [...list, joinEntryOf(bot)] }); };
+  const toggleAutoBoost = (bot) => saveSettings({ botOptions: { ...botOptions, [bot.login]: { autoBoost: !autoBoostOf(bot.login) } } });
+  const removeBot = (bot) => saveSettings({
+    bots: bot.kind === "twitch" ? twitchLogins.filter((login) => login !== bot.login) : twitchLogins,
+    customBots: bot.kind === "custom" ? customBots.filter((customBot) => customBot.login !== bot.login) : customBots,
+    autoJoin: (settings.autoJoin || []).filter((entry) => entry.login !== bot.login),
   });
-  const addTwitch = (us) => saveSettings({ bots: [...new Set([...logins, ...us.map((u) => u.login)])] });
-  const addCustom = (bot) => saveSettings({ customBots: [...custom.filter((b) => b.login !== bot.login), bot] });
-  const replacePicture = async (r, file) => { const res = await api(`/image/${r.login}`, { method: "PUT", body: { data: await readFile(file) } }); if (res?.path) addCustom({ ...custom.find((b) => b.login === r.login), image: res.path }); };
-  const togglePick = (login) => setPicked((p) => { const n = new Set(p); n.has(login) ? n.delete(login) : n.add(login); return n; });
-  const pickedEntries = roster.filter((r) => picked.has(r.login) && !r.missing).map(entryOf);
-  const autoCount = roster.filter((r) => ajLogins.has(r.login)).length;
+  const addTwitchBots = (users) => saveSettings({ bots: [...new Set([...twitchLogins, ...users.map((user) => user.login)])] });
+  const addCustomBot = (bot) => saveSettings({ customBots: [...customBots.filter((customBot) => customBot.login !== bot.login), bot] });
+  const replacePicture = async (bot, file) => {
+    const upload = await api(`/image/${bot.login}`, { method: "PUT", body: { data: await readFileAsDataUrl(file) } });
+    if (upload?.path) addCustomBot({ ...customBots.find((customBot) => customBot.login === bot.login), image: upload.path });
+  };
+  const joinNow = (bot) => api("/join", { body: [joinEntryOf(bot)] });
+  const togglePick = (login) => setPickedLogins((previous) => { const next = new Set(previous); next.has(login) ? next.delete(login) : next.add(login); return next; });
+  const pickedEntries = roster.filter((bot) => pickedLogins.has(bot.login) && !bot.missing).map(joinEntryOf);
+  const autoJoinCount = roster.filter((bot) => autoJoinLogins.has(bot.login)).length;
 
   return html`
     <div class="bots">
       <article>
         <header>Bots <span class="hint-inline">race as AI cars · ★ auto-join every lobby · ↯ auto-boost (off = something else drives its pool via the API)</span></header>
-        <${TwitchLookup} onAdd=${addTwitch} label="Add Twitch" />
-        <${AddCustom} onAdd=${addCustom} />
+        <${TwitchLookup} onAdd=${addTwitchBots} label="Add Twitch" />
+        <${AddCustomBotForm} onAdd=${addCustomBot} />
       </article>
 
       <article class="people">
         <header>
-          <span>Roster <b>· ${roster.length}</b> <span class="hint-inline">${autoCount} auto-join</span></span>
+          <span>Roster <b>· ${roster.length}</b> <span class="hint-inline">${autoJoinCount} auto-join</span></span>
           <div class="toolbar">
-            ${picked.size ? html`<span class="count">${picked.size} selected</span>` : null}
-            <button onClick=${() => setPicked(new Set(roster.filter((r) => !r.missing).map((r) => r.login)))}>All</button>
-            <button onClick=${() => setPicked(new Set())} disabled=${!picked.size}>None</button>
-            <button class="go" disabled=${!pickedEntries.length || snap.running} onClick=${() => api("/join", { body: pickedEntries })}>Add selected to lobby</button>
+            ${pickedLogins.size ? html`<span class="count">${pickedLogins.size} selected</span>` : null}
+            <button onClick=${() => setPickedLogins(new Set(roster.filter((bot) => !bot.missing).map((bot) => bot.login)))}>All</button>
+            <button onClick=${() => setPickedLogins(new Set())} disabled=${!pickedLogins.size}>None</button>
+            <button class="go" disabled=${!pickedEntries.length || snapshot.running} onClick=${() => api("/join", { body: pickedEntries })}>Add selected to lobby</button>
             <button onClick=${() => confirm("Restore the built-in Twitch list?") && saveSettings({ bots: null })} title="restore the built-in Twitch list">Defaults</button>
           </div>
         </header>
         ${roster.length ? html`
           <${Grid}>
-            ${roster.map((r) => html`
-              <${Card} key=${r.login} r=${r} picked=${picked.has(r.login)} inLobby=${inLobby.has(r.login)} onClick=${() => !r.missing && togglePick(r.login)}
-                badges=${[...(ajLogins.has(r.login) ? ["Auto-join"] : []), ...(autoBoost(r.login) ? [] : ["API boosts"])]}
-                tools=${html`
-                  <button class=${"star" + (ajLogins.has(r.login) ? " on" : "")} title=${ajLogins.has(r.login) ? "auto-joins every lobby (click to stop)" : "auto-join every lobby"} onClick=${(e) => { e.stopPropagation(); toggleAutoJoin(r); }}>★</button>
-                  <button class=${"bolt" + (autoBoost(r.login) ? " on" : "")} title=${autoBoost(r.login) ? "auto-boost on (click: let something else control it)" : "auto-boost off: a third party drives this car's boosts"} onClick=${(e) => { e.stopPropagation(); toggleAutoBoost(r); }}>↯</button>
-                  <span class="sp"></span>
-                  <button class="x" title="remove" onClick=${(e) => { e.stopPropagation(); remove(r); }}>✕</button>`}
-                picture=${r.kind === "custom" ? html`<label class="pic-wrap" onClick=${(e) => e.stopPropagation()} title="click to change picture">
-                    ${r.image ? html`<img src=${"/image/" + r.login + "?v=" + encodeURIComponent(r.image)} alt="" style=${r.color ? { borderColor: r.color } : {}} />` : html`<div class="ph" style=${r.color ? { background: r.color, color: "#000" } : {}}>${(r.displayName || r.login).slice(0, 2).toUpperCase()}</div>`}
-                    <input type="file" accept="image/*" hidden onClick=${(e) => e.stopPropagation()} onChange=${(e) => e.target.files[0] && replacePicture(r, e.target.files[0])} />
-                  </label>` : undefined}>
-                ${!r.missing ? html`<button class="join" disabled=${snap.running || inLobby.has(r.login)} onClick=${(e) => { e.stopPropagation(); api("/join", { body: [entryOf(r)] }); }}>${inLobby.has(r.login) ? "in lobby" : "Join now"}</button>` : null}
-              <//>`)}
+            ${roster.map((bot) => html`
+              <${BotCard} key=${bot.login} bot=${bot} picked=${pickedLogins.has(bot.login)} inLobby=${lobbyLogins.has(bot.login)} racing=${snapshot.running}
+                autoJoin=${autoJoinLogins.has(bot.login)} autoBoost=${autoBoostOf(bot.login)}
+                onTogglePick=${togglePick} onToggleAutoJoin=${toggleAutoJoin} onToggleAutoBoost=${toggleAutoBoost} onRemove=${removeBot} onReplacePicture=${replacePicture} onJoin=${joinNow} />`)}
           <//>`
         : html`<${Empty} text="Roster is empty" />`}
       </article>

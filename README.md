@@ -117,7 +117,7 @@ Works as an OBS custom browser dock. Pages and the overlays reconnect on their o
 | `POST /race/end` | |
 | `POST /race/next` | next map from the queue (set by `/lobby` or the Play tab); 409 if nothing queued |
 
-Errors: 401 token required · 404 no such car · 409 not applicable (no race / finished / lobby closed) · 501 a game update renamed an obfuscated member (fix the name in `src/Game.cs`).
+Errors: 401 token required · 404 no such car · 409 not applicable (no race / finished / lobby closed) · 501 a game update renamed an obfuscated member (fix the name in `src/GameNames.cs`).
 
 Notes: a boom is a stun, not a kill (RIP banner, 5 s fuse, car launched, drives again after 4 s). `pct` = progress ÷ finish line. `curl -X POST` needs `-d ''`. CORS is open.
 
@@ -147,13 +147,24 @@ UI tests: `pnpm test:ui` (Playwright + TypeScript; `tests/ui/` mirrors `ui/`: `p
 ## Layout
 
 ```
-src/Plugin.cs    HttpListener, SSE, auth, static ui/ serving, hotkey
-src/Routes.cs    URL → action
-src/Game.cs      the only file that touches obfuscated game members
-src/Patches.cs   Harmony: race lifecycle events, free-cam keys, slow re-apply
-src/Settings.cs  persisted page settings + auto-join
-src/Pure.cs      engine-free logic (boost zones, versions, mini map math, colors, chat parsing); what the unit tests cover
+src/Plugin.cs        HttpListener, SSE, auth, static ui/ serving, hotkey
+src/Routes.cs        URL → action
+src/GameNames.cs     the obfuscation boundary: string constants for Harmony/reflection targets, singletons, readable extension methods
+src/GlobalUsings.cs  readable aliases for the game's obfuscated types (Vehicle, RacerProfile, ...); no other file spells an obfuscated name
+src/States.cs        CameraMode / VehicleState / GameScreen enums, converted to the API strings in one place each
+src/Game/            static partial class Game, one file per concern: Vehicles, Actions, Lobby, Perks, Colors, Chat, Track, Images
+src/Camera/          static partial class Cam: Camera.cs (state + helpers), Camera.Shots.cs (shots + Tick), Camera.Director.cs (auto director)
+src/Patches.cs       Harmony: race lifecycle events, booms/boosts, joins, free-cam keys, chat, slow re-apply, row images
+src/Settings.cs      persisted page settings + auto-join
+src/Pure.cs          engine-free logic (boost zones, versions, mini map math, colors, chat parsing); what the unit tests cover
+src/Minimap.cs       in-game mini map · src/Credits.cs in-game credits block · src/TwitchAuth.cs mod login · src/Updates.cs · src/Webhooks.cs
 ui/              control page (React + zustand + htm from esm.sh, Pico CSS); one .js + .css per page/component
+ui/app.js        header + page router; ui/store.js = the zustand store (typed in JSDoc) fed by /events
+ui/pages/        <page>.js composes <page>/<Card>.js: controls/ (Driver, Field, Race), camera/ (CameraControls, DirectorShots),
+                 bots/ (AddCustomBotForm, BotCard), settings/ (one card per section + fields.js, TwitchConnect), api/ (Code, RouteCard, EventLog)
+ui/components/   racers.js (timing board), roster.js (TwitchLookup, Card, Grid, Empty, useTwitchUsers)
+ui/lib/          shared helpers, no duplicates elsewhere: html (htm + useCss), api (fetch + token), toast, text (escapeHtml, ordinal, initials),
+                 files, query (browser-source ?token=), defaults (overlay / mini map look defaults)
                  overlay.* (bar) + leaderboard.* (list) share overlay-shared.js (event stream, snapshot, race phase); minimap.* stands alone
 tests/unit/      xunit tests, mirroring src/: tests/unit/Pure/<Concern>Tests.cs, one file per section of Pure.cs
 tests/ui/        Playwright UI tests mirroring ui/ (pages/, components/, app, overlay, leaderboard, minimap); fixtures/ = server truth, console guard, working-tree router, fake EventSource
