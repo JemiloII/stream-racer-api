@@ -16,6 +16,7 @@ static partial class Cam
     // Every so often, a short look straight down so viewers can see where the whole field is on the track.
     // Racers read the overhead to judge the straight ahead and time a boost, so it comes back every couple of cuts.
     // The clock is only a backstop for when a single shot is held for ages.
+    public const float GridHold = 6f, HighHold = 10f;   // the opening: grid shot, then one high overview
     public const int OverheadEveryCuts = 2;
     public const float OverheadEvery = 45f, OverheadHold = 9f;
     static int _cutsSinceOverhead;
@@ -120,6 +121,20 @@ static partial class Cam
             if (ManualHold || Time.time < _autoPausedUntil) continue;
             var racing = Racing(); if (racing.Count == 0) continue;
 
+            // The opening comes before everything else, and we re-take the camera every pass: the game points its own
+            // camera at the grid as the race starts, which used to steal the shot a moment after we set it.
+            float sinceStart = Time.time - _runningSince;
+            if (sinceStart < GridHold && On("grid"))
+            {
+                if (Mode != CameraMode.Grid || Instances.FreeCam == null || !Instances.FreeCam.IsActive()) { Grid(0); NoteCut("grid"); }
+                continue;
+            }
+            if (sinceStart < GridHold + HighHold && On("high"))
+            {
+                if (Mode != CameraMode.High || Instances.FreeCam == null || !Instances.FreeCam.IsActive()) { High(0, 60f, 60f); NoteCut("high"); }
+                continue;
+            }
+
             // priorities: finish, then a track cam a group is about to pass
             if (On("finish") && Approaching().Count > 0)
             {
@@ -133,6 +148,7 @@ static partial class Cam
                 continue;
             }
             float age = Time.time - _lastCutAt;
+
 
             // Crashes: a pile-up (3+ cars down within 8 s) is worth a look; a single crash is not — go find the action.
             int recentCrashes = Game.CrashedAt.Values.Count(at => Time.time - at < 8f);
@@ -150,11 +166,6 @@ static partial class Cam
             var approachingProp = ApproachingProp();
             if (On("prop") && approachingProp != null && approachingProp != _lastProp && age > 6f && Random.value < 0.5f) { Prop(approachingProp); _lastProp = approachingProp; NoteCut("prop"); continue; }
             if (Mode != CameraMode.Prop) _lastProp = null;
-
-            // opening: the launch from the road ahead (cars come at the camera), then one high overview
-            float sinceStart = Time.time - _runningSince;
-            if (sinceStart < 6f && On("grid")) { if (Mode != CameraMode.Grid) { Grid(0); NoteCut("grid"); } continue; }
-            if (sinceStart < 16f && On("high")) { if (Mode != CameraMode.High) { High(0, 60f, 60f); NoteCut("high"); } continue; }
 
             // the lead changed hands: that's the story, show the new leader from the front for a bit
             var leadNow = Leader();

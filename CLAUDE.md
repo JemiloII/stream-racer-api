@@ -60,3 +60,4 @@ BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `
 - Percent: `Game.FinishDistance` prefers the finish-line trigger, treats a trigger found near route distance 0 as a lap finish (= route length), and never reports 100 until the car has actually finished.
 - Horizontal bar spacing: `overlay.spreadMode` "field" (default; the leader paces the bar and the field is stretched out behind by their gap) or "track" (raw progress); `?spreadMode=`.
 - Director shot ranking: behind-the-car views win (chase +4, wide follow +3, pack/high +1 on top of coverage) so racers can read the road ahead and time a boost.
+- Opening: the grid shot (`Cam.GridHold` 6 s) then a high overview (`Cam.HighHold` 10 s) run before every other director rule and re-take the free cam each pass, because the game aims its own camera at the grid when a race starts.
