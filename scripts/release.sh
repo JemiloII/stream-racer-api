@@ -19,10 +19,15 @@ mkdir -p "$stage"
 unzip -q -o "$(bepinex_zip)" -d "$stage"
 mkdir -p "$stage/BepInEx/plugins"
 cp build/StreamRacerApi.dll "$stage/BepInEx/plugins/"
+cp "scripts/Install Stream Racer API.bat" "$stage/"   # double-click installer: finds the Steam folder, copies everything
 
 cat > "$stage/INSTALL.txt" <<EOF
 Stream Racer API $version
 
+Easiest: unzip anywhere, close the game, double-click "Install Stream Racer API.bat". It finds your Steam
+folder, copies everything in and tells you when it's done.
+
+By hand:
 1. Close Stream Racer.
 2. Unzip everything in this archive into the game folder, next to StreamRacer.exe
    (usually C:\Program Files (x86)\Steam\steamapps\common\Stream Racer). Merge folders if asked.

@@ -4,7 +4,7 @@ Stream Racer API: a BepInEx plugin that exposes [Stream Racer](https://store.ste
 
 ## Install
 
-**Release zip:** contains everything, BepInEx 5.4.23.3 (`winhttp.dll`, `doorstop_config.ini`, `BepInEx/core`) plus the plugin at `BepInEx/plugins/StreamRacerApi.dll`. Close the game, unzip over the game folder (next to `StreamRacer.exe`), launch the game, open `http://localhost:8793`. See `INSTALL.txt` inside the zip.
+**Release zip:** contains everything, BepInEx 5.4.23.3 (`winhttp.dll`, `doorstop_config.ini`, `BepInEx/core`) plus the plugin at `BepInEx/plugins/StreamRacerApi.dll`. Close the game, unzip anywhere and double-click `Install Stream Racer API.bat` (finds your Steam folder and copies it all in), or unzip over the game folder next to `StreamRacer.exe` by hand. Launch the game, open `http://localhost:8793`. See `INSTALL.txt` inside the zip.
 
 **From source** (Git Bash, .NET 8 SDK):
 
