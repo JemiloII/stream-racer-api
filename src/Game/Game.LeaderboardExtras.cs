@@ -12,7 +12,7 @@ namespace StreamRacerApi;
 
 static partial class Game
 {
-    const string AvatarName = "SRApiAvatar", PercentName = "SRApiPercent";
+    const string AvatarName = "SRApiAvatar", PercentName = "SRApiPercent", ColorBarName = "SRApiColorBar";
     static readonly Dictionary<string, Sprite> _avatarSprites = new();   // login -> picture, loaded once per source
     static readonly HashSet<string> _avatarLoading = new();
     static readonly Dictionary<string, string> _avatarSource = new();    // login -> what we loaded, so a change reloads
@@ -43,6 +43,11 @@ static partial class Game
             if (wantAvatar && vehicle != null) FeedAvatar(avatar.Find("Picture")?.GetComponent<Image>(), Login(vehicle));
         }
 
+        var colorBar = row.Find(ColorBarName) as RectTransform;
+        if (colorBar == null) colorBar = MakeColorBar(row);
+        colorBar.gameObject.SetActive(vehicle != null && Settings.Current.colorLeaderboard);
+        if (vehicle != null) colorBar.GetComponent<Image>().color = vehicle.Profile().Color();
+
         var percent = row.Find(PercentName) as RectTransform;
         if (wantPercent && percent == null) percent = MakePercent(row, nameText);
         if (percent != null)
@@ -67,7 +72,7 @@ static partial class Game
         rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
         rect.pivot = new Vector2(0f, 0.5f);
         rect.sizeDelta = new Vector2(size, size);
-        rect.anchoredPosition = new Vector2(22f, 0f);   // clear of the place number to its left
+        rect.anchoredPosition = new Vector2(14f, 0f);   // just clear of the colour bar and the place number
         var holderImage = holder.GetComponent<Image>();
         holderImage.sprite = DiscSprite(); holderImage.type = Image.Type.Simple; holderImage.raycastTarget = false;
         holder.AddComponent<Mask>().showMaskGraphic = false;   // the disc masks the picture into a circle
@@ -78,7 +83,21 @@ static partial class Game
         var image = picture.GetComponent<Image>();
         image.preserveAspect = true; image.raycastTarget = false; image.enabled = false;
         // the name starts after the picture (the offset is applied once; a second pass would keep pushing it)
-        nameText.offsetMin = new Vector2(Mathf.Max(nameText.offsetMin.x, size + 36f), nameText.offsetMin.y);   // and the name clear of the picture
+        nameText.offsetMin = new Vector2(Mathf.Max(nameText.offsetMin.x, size + 26f), nameText.offsetMin.y);   // and the name clear of the picture
+        return rect;
+    }
+
+    // A thin bar down the left edge in the racer's colour, full row height, like the browser leaderboard's coloured edge.
+    static RectTransform MakeColorBar(RectTransform row)
+    {
+        var bar = new GameObject(ColorBarName, typeof(RectTransform), typeof(Image));
+        var rect = (RectTransform)bar.transform;
+        rect.SetParent(row, false);
+        rect.anchorMin = new Vector2(0f, 0f); rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        rect.sizeDelta = new Vector2(5f, 0f);   // full row height, no margin
+        rect.anchoredPosition = Vector2.zero;
+        bar.GetComponent<Image>().raycastTarget = false;
         return rect;
     }
 

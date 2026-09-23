@@ -21,7 +21,8 @@ describe('GET /track', () => {
 
   test('has no points while the game sits in the menu', async () => {
     const screen = (await get<ScreenState>('/screen')).json!;
-    if (screen.running || screen.lobby) return;
+    // the track stays loaded on the results screen too: only the menu is really "no track"
+    if (!['home', 'main', 'play', 'settings'].includes(screen.screen)) return;
     expect((await get<TrackResponse>('/track')).json!.points).toEqual([]);
   });
 });
@@ -44,7 +45,8 @@ describe('GET /track/zones', () => {
 
   test('is empty while the game sits in the menu', async () => {
     const screen = (await get<ScreenState>('/screen')).json!;
-    if (screen.running || screen.lobby) return;
+    // the track stays loaded on the results screen too: only the menu is really "no track"
+    if (!['home', 'main', 'play', 'settings'].includes(screen.screen)) return;
     const zones = (await get<ZonesResponse>('/track/zones')).json!;
     expect(zones.zones).toEqual([]);
     expect(zones.map).toBeNull();

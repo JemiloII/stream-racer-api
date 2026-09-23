@@ -38,8 +38,16 @@ static partial class Game
     // What the lobby row prints under the name: backend CustomTitle ("Developer", "Streamer", ...) else Subscriber / Normal Racer.
     public static string Title(Vehicle vehicle) => vehicle.Profile().Title();
 
+    /// How far along the route the finish line actually is: the game's own finishAt can sit short of the line, which
+    /// would read 100% while the car is still driving. Falls back to finishAt when the trigger can't be found.
+    public static float FinishDistance(Vehicle vehicle)
+    {
+        float gameFinish = FinishAt(vehicle);
+        return FinishLine(out _, out _, out var lineDistance) && lineDistance > 1f ? Mathf.Max(lineDistance, gameFinish) : gameFinish;
+    }
+
     static float ProgressPercent(Vehicle vehicle) =>
-        vehicle.HasFinished() ? 100f : Mathf.Clamp(vehicle.Progress() / Mathf.Max(1f, FinishAt(vehicle)) * 100f, 0f, 100f);
+        vehicle.HasFinished() ? 100f : Mathf.Clamp(vehicle.Progress() / Mathf.Max(1f, FinishDistance(vehicle)) * 100f, 0f, 100f);
 
     public static object Dto(Vehicle vehicle, int place)
     {

@@ -68,6 +68,7 @@ static partial class Game
         {
             map = game?.MapId(), mapName = game?.MapName(),
             length = circuit?.Length() ?? 0f, finishAt = Vehicles().Select(FinishAt).DefaultIfEmpty(0f).Max(),
+            finishLineAt = FinishLine(out _, out _, out var finishLineDistance) ? finishLineDistance : -1f,
             zones = BoostZones().Select(zone => new { start = zone[0], end = zone[1], length = zone[1] - zone[0] }).ToList(),
         };
     }
