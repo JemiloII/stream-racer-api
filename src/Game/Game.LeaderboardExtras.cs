@@ -87,7 +87,8 @@ static partial class Game
         return rect;
     }
 
-    // A thin bar down the left edge in the racer's colour, full row height, like the browser leaderboard's coloured edge.
+    // A thin bar down the far left of the whole row in the racer's colour, full height, like the browser leaderboard.
+    // The place numbers sit in their own column left of the row, so the bar is pushed out past them to the panel edge.
     static RectTransform MakeColorBar(RectTransform row)
     {
         var bar = new GameObject(ColorBarName, typeof(RectTransform), typeof(Image));
@@ -96,9 +97,20 @@ static partial class Game
         rect.anchorMin = new Vector2(0f, 0f); rect.anchorMax = new Vector2(0f, 1f);
         rect.pivot = new Vector2(0f, 0.5f);
         rect.sizeDelta = new Vector2(5f, 0f);   // full row height, no margin
-        rect.anchoredPosition = Vector2.zero;
+        rect.anchoredPosition = new Vector2(-NumberColumnWidth(row), 0f);
         bar.GetComponent<Image>().raycastTarget = false;
         return rect;
+    }
+
+    /// How far the place-number column reaches left of a row: its width plus the gap the layout puts between them.
+    static float NumberColumnWidth(RectTransform row)
+    {
+        var content = row.parent != null ? row.parent.parent : null;   // ListItems -> Content
+        var numbers = content != null ? content.Find("ListNums") as RectTransform : null;
+        if (numbers == null || numbers.childCount == 0) return 0f;
+        float width = ((RectTransform)numbers.GetChild(0)).rect.width;
+        var layout = content.GetComponent<UnityEngine.UI.HorizontalOrVerticalLayoutGroup>();
+        return width + (layout != null ? layout.spacing : 0f);
     }
 
     // The percent at the right, in the same font as the name.
