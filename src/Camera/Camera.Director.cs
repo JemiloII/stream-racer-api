@@ -14,7 +14,9 @@ static partial class Cam
     static float _lastCutAt; static string _lastCutKey; static bool _wasRunning;
     static Vehicle _lastLeader; static float _lastDuelAt = -100f, _lastOverheadAt = -100f, _runningSince;
     // Every so often, a short look straight down so viewers can see where the whole field is on the track.
-    public const float OverheadEvery = 35f, OverheadHold = 5f;
+    // Racers use the overhead to judge the straight ahead and time a boost, so it comes round less often but stays
+    // up long enough to read the track.
+    public const float OverheadEvery = 60f, OverheadHold = 9f;
     static void NoteCut(string key) { _lastCutAt = Time.time; _lastCutKey = key; }
 
     public static void OnBoom(Vehicle vehicle)
