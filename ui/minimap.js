@@ -1,5 +1,7 @@
 // Browser-source mini map: the route outline + car dots, drawn on a canvas that fills the page.
 // Same look settings as the in-game map (Settings → Mini map), live via the settings event.
+// Hidden outside a race: the map fades out on race_end and stays gone until the next lobby / race (?showInLobby=1
+// draws it during the lobby too).
 // Query: ?token=  &names=1 (labels)  &leaderBig=1  &aspect=16:9  &track=%23fff  &bg=%23000  &alpha=0  &marker=3
 import { query, tokenQuery } from "./lib/query.js";
 import { MINIMAP_DEFAULTS } from "./lib/defaults.js";
@@ -36,6 +38,7 @@ function applyLook(saved) {
   look = { ...MINIMAP_DEFAULTS, ...(saved || {}) };
   for (const key of ["track", "bg", "alpha", "marker", "pad"]) if (query.get(key)) look[key] = key === "track" || key === "bg" ? query.get(key) : +query.get(key);
   if (query.get("names") != null) look.names = query.get("names") === "1";
+  if (query.get("showInLobby") != null) look.showInLobby = query.get("showInLobby") === "1";
   if (query.get("leaderBig") != null) look.leaderBig = query.get("leaderBig") === "1";
   if (query.get("aspect")) look.aspect = query.get("aspect");
   fit();
@@ -79,8 +82,25 @@ function hexToRgba(hex, alpha) {
   return `rgba(${rgb >> 16 & 255},${rgb >> 8 & 255},${rgb & 255},${alpha})`;
 }
 
+// Which phase the race is in decides whether the map is drawn at all: racing (and the lobby when showInLobby is on)
+// draw; race_end fades the whole map out over a second; after that, and on any other screen, nothing is drawn.
+const FADE_MS = 1000;
+let phase = "idle", fadeTimer;
+const visible = () => phase === "racing" || phase === "ended" || (phase === "lobby" && !!look.showInLobby);
+function setPhase(next) {
+  if (next === phase) return;
+  clearTimeout(fadeTimer);
+  phase = next;
+  canvas.style.transition = next === "ended" ? `opacity ${FADE_MS}ms ease-out` : "none";
+  canvas.style.opacity = next === "ended" ? "0" : visible() ? "1" : "0";
+  if (next === "ended") fadeTimer = setTimeout(() => { snapshot = { vehicles: [] }; shownPositions.clear(); setPhase("idle"); draw(); }, FADE_MS + 100);
+  draw();
+}
+const phaseOf = (race) => (race?.running ? "racing" : race?.lobby ? "lobby" : "idle");
+
 function draw() {
   context.clearRect(-boxLeft, -boxTop, innerWidth, innerHeight);
+  if (!visible()) return;
   context.fillStyle = hexToRgba(look.bg, look.alpha);
   roundRect(0, 0, boxWidth, boxHeight, 10); context.fill();
   const toScreen = projector();
@@ -127,7 +147,7 @@ async function loadTrack() {
   try { const track = await (await fetch("/track" + tokenQuery)).json(); route = track.points || []; bounds = track.bounds || null; } catch { route = []; bounds = null; }
   fit();
 }
-const fetchRace = () => fetch("/race" + tokenQuery).then((response) => response.json()).then((race) => { snapshot = race; }).catch(() => {});
+const fetchRace = () => fetch("/race" + tokenQuery).then((response) => response.json()).then((race) => { snapshot = race; if (phase !== "ended") setPhase(phaseOf(race)); }).catch(() => {});
 function resync() {
   fetchRace();
   fetch("/settings" + tokenQuery).then((response) => response.json()).then((settings) => applyLook(settings.minimap)).catch(() => {});
@@ -138,11 +158,13 @@ let eventSource, retryTimer;
 function connect() {
   clearTimeout(retryTimer); eventSource?.close();
   eventSource = new EventSource("/events" + tokenQuery);
-  const onSnapshot = (event) => { snapshot = JSON.parse(event.data); for (const vehicle of snapshot.vehicles) rememberPosition(vehicle); };
+  const onSnapshot = (event) => { snapshot = JSON.parse(event.data); for (const vehicle of snapshot.vehicles) rememberPosition(vehicle); if (phase !== "ended") setPhase(phaseOf(snapshot)); };
   for (const name of ["lobby", "race_start", "positions"]) eventSource.addEventListener(name, onSnapshot);
-  // race over: clear the map (keep the outline)
-  eventSource.addEventListener("race_end", () => { snapshot = { vehicles: [] }; shownPositions.clear(); });
-  eventSource.addEventListener("lobby", () => { shownPositions.clear(); });
+  // race over: fade the whole map out, then draw nothing until the next lobby or race
+  eventSource.addEventListener("race_end", () => setPhase("ended"));
+  eventSource.addEventListener("screen", (event) => { const screen = JSON.parse(event.data); if (phase !== "ended" && !screen.running && !screen.lobby) setPhase("idle"); });
+  eventSource.addEventListener("lobby", () => { shownPositions.clear(); setPhase("lobby"); });
+  eventSource.addEventListener("race_start", () => setPhase("racing"));
   eventSource.addEventListener("pos", (event) => applyPos(JSON.parse(event.data)));
   eventSource.addEventListener("race_start", loadTrack);
   eventSource.addEventListener("lobby", loadTrack);

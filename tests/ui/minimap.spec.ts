@@ -1,4 +1,16 @@
 import { test, expect, type Page } from "./fixtures/test";
+import { installFakeEvents, emitEvent, mockJson } from "./fixtures/fake-events";
+import { racingSnapshot, lobbySnapshot, endedSnapshot } from "./fixtures/sample-race";
+
+const anythingDrawn = (page: Page) => page.evaluate(() => {
+  const canvas = document.getElementById("map") as HTMLCanvasElement | null;
+  const context = canvas?.getContext("2d");
+  if (!canvas || !context || !canvas.width) return false;
+  if (Number(getComputedStyle(canvas).opacity) === 0) return false;
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+  for (let index = 3; index < data.length; index += 4) if (data[index]) return true;
+  return false;
+});
 
 // OBS browser source (ui/minimap.html): the map box is the largest rectangle of the requested aspect that fits
 // the window, centred. We read the drawn box straight off the canvas pixels (the translucent background fill).
@@ -49,5 +61,40 @@ test.describe("Mini map browser source", () => {
     test.skip(!/^\d+:\d+$/.test(configured), `aspect "${configured}" depends on the loaded track`);
     await page.goto("/minimap?alpha=0.6"); // transparent by default: give the box a colour so the pixels show its ratio
     await expect.poll(() => drawnBoxRatio(page)).toBeCloseTo(parseAspect(configured), 1);
+  });
+});
+
+test.describe("Mini map race phase", () => {
+  test.beforeEach(async ({ page }) => {
+    await installFakeEvents(page);
+    await mockJson(page, "/settings", { minimap: { alpha: 0.6, aspect: "1:1" } });
+  });
+
+  test("draws while a race is running", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/minimap");
+    await expect.poll(() => anythingDrawn(page)).toBe(true);
+  });
+
+  test("clears itself when the race ends and stays gone", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/minimap");
+    await expect.poll(() => anythingDrawn(page)).toBe(true);
+    await emitEvent(page, "race_end", endedSnapshot());
+    await expect.poll(() => anythingDrawn(page), { timeout: 5000 }).toBe(false);
+  });
+
+  test("stays blank in a lobby unless showInLobby is on, then comes back for the next race", async ({ page }) => {
+    await mockJson(page, "/race", lobbySnapshot());
+    await page.goto("/minimap");
+    await expect.poll(() => anythingDrawn(page)).toBe(false);
+    await emitEvent(page, "race_start", racingSnapshot());
+    await expect.poll(() => anythingDrawn(page)).toBe(true);
+  });
+
+  test("?showInLobby=1 draws the track before the race starts", async ({ page }) => {
+    await mockJson(page, "/race", lobbySnapshot());
+    await page.goto("/minimap?showInLobby=1");
+    await expect.poll(() => anythingDrawn(page)).toBe(true);
   });
 });
