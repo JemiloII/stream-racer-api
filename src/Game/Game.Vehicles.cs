@@ -104,7 +104,7 @@ static partial class Game
         return new
         {
             running = Running, lobby = InLobby, streamer = StreamerLogin,
-            map = game == null ? null : new { id = game.MapId(), name = game.MapName() },
+            map = game == null ? null : new { id = game.MapId(), name = game.MapName(), creator = MapCreator(game.MapId()) },
             vehicles = ranked.Select((vehicle, index) => Dto(vehicle, index + 1)).ToList(),
         };
     }

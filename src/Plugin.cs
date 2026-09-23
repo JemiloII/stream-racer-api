@@ -16,11 +16,11 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.37.0"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.38.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
-    public static ConfigEntry<string> UpdateUrl, UiFolder;
+    public static ConfigEntry<string> UpdateUrl;
     public static ConfigEntry<int> Port;
     public static ConfigEntry<KeyCode> CamUp, CamDown, BoostKey;
     public static ConfigEntry<float> TickHz, PosHz;
@@ -42,7 +42,6 @@ public class Plugin : BaseUnityPlugin
         Port = Config.Bind("api", "Port", 8793, "HTTP/SSE port");
         TickHz = Config.Bind("api", "TickHz", 4f, "full 'positions' snapshot rate while racing");
         PosHz = Config.Bind("api", "PosHz", 60f, "light 'pos' event rate while racing (login, x, z, pct, place per car) for smooth maps/overlays");
-        UiFolder = Config.Bind("api", "UiFolder", "", "Serve the control page and overlays from this folder instead of the copy baked into the DLL (e.g. D:/streaming/stream-racer-api/ui). Edits show up on a browser refresh, no game restart. Empty = use the built-in copy.");
         UpdateUrl = Config.Bind("api", "UpdateUrl", "", "URL of a JSON {version, url} describing the latest release; GET /version then reports upToDate and the pages color the version. Empty = no check.");
         Token = Config.Bind("api", "Token", "", "if set, every API call needs 'Authorization: Bearer <token>' (or ?token= for SSE). The control page still loads; enter the token on its Settings page.");
         BindAll = Config.Bind("api", "BindAll", false, "listen on all interfaces so a bot on another machine can reach the API. Set a Token first. Windows needs once: netsh http add urlacl url=http://+:PORT/ user=Everyone");
@@ -183,21 +182,6 @@ public class Plugin : BaseUnityPlugin
         if (path == "leaderboard") path = "leaderboard.html";
         var extension = Path.GetExtension(path);
         if (!Mime.TryGetValue(extension, out var mime)) return false;
-        // live editing: a folder wins over the embedded copy, so saving a page and refreshing the browser is enough
-        string folder = UiFolder?.Value;
-        if (!string.IsNullOrWhiteSpace(folder))
-        {
-            string onDisk = Path.GetFullPath(Path.Combine(folder, path));
-            if (onDisk.StartsWith(Path.GetFullPath(folder), System.StringComparison.OrdinalIgnoreCase) && File.Exists(onDisk))
-            {
-                response.ContentType = mime;
-                response.AddHeader("Cache-Control", "no-store");
-                var bytes = File.ReadAllBytes(onDisk);
-                response.ContentLength64 = bytes.Length;
-                response.OutputStream.Write(bytes, 0, bytes.Length); response.Close();
-                return true;
-            }
-        }
         var assembly = typeof(Plugin).Assembly;
         // MSBuild's RecursiveDir uses backslashes on Windows
         using var resource = assembly.GetManifestResourceStream("ui/" + path) ?? assembly.GetManifestResourceStream("ui/" + path.Replace('/', '\\'));

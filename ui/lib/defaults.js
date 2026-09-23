@@ -6,5 +6,5 @@ export const OVERLAY_DEFAULTS = {
 };
 
 // x / y / w are fractions of the game window from the bottom-left; h is unused (the aspect shapes the box).
-export const MINIMAP_DEFAULTS = { enabled: true, x: 0.02, y: 0.03, w: 0.18, h: 0, marker: 3, bg: "#000000", alpha: 0, track: "#ffffff", pad: 1.15, leaderBig: true, names: true, showInLobby: false, aspect: "1:1" };
+export const MINIMAP_DEFAULTS = { enabled: true, x: 0.02, y: 0.03, w: 0.18, h: 0, marker: 3, bg: "#000000", alpha: 0, track: "#ffffff", pad: 1.15, leaderBig: true, names: true, mapTitle: true, showInLobby: false, aspect: "1:1" };
 export const MINIMAP_RATIOS = ["1:1", "16:9", "4:3", "21:9", "3:2", "9:16", "auto"];

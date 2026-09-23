@@ -61,6 +61,9 @@ static partial class Game
         });
     }
 
+    /// Who built the current map, from the list the game already downloaded (empty until that arrives).
+    public static string MapCreator(int mapId) => Maps.FirstOrDefault(map => map.ID == mapId)?.Creator;
+
     public static object MapDto(MapOverviewListItem map) => new { id = map.ID, name = map.Name, creator = map.Creator, official = map.Official, length = map.Length, avgTime = map.Time };
 
     // Lobby creation = what the map list's green play button does: put a playlist into the game's

@@ -100,3 +100,35 @@ test.describe("Mini map race phase", () => {
     await expect.poll(() => anythingDrawn(page)).toBe(true);
   });
 });
+
+test.describe("Map title above the mini map", () => {
+  test.beforeEach(async ({ page }) => { await installFakeEvents(page); });
+
+  test("shows the map name and its author while a race is on", async ({ page }) => {
+    const race = { ...racingSnapshot(), map: { id: 234, name: "Locate Yourself", creator: "MindZoneRL" } };
+    await mockJson(page, "/settings", { minimap: { alpha: 0.6 } });
+    await mockJson(page, "/race", race);
+    await page.goto("/minimap");
+    await expect.poll(() => page.evaluate(() => {
+      const canvas = document.getElementById("map") as HTMLCanvasElement;
+      const context = canvas.getContext("2d")!;
+      const { data, width } = context.getImageData(0, 0, canvas.width, Math.round(canvas.height * 0.08));
+      for (let index = 3; index < data.length; index += 4) if (data[index]) return true;
+      return width > 0 ? false : false;
+    })).toBe(true);
+  });
+
+  test("?mapTitle=0 leaves that strip empty", async ({ page }) => {
+    const race = { ...racingSnapshot(), map: { id: 234, name: "Locate Yourself", creator: "MindZoneRL" } };
+    await mockJson(page, "/settings", { minimap: { alpha: 0 } });
+    await mockJson(page, "/race", race);
+    await page.goto("/minimap?mapTitle=0");
+    await expect.poll(() => page.evaluate(() => {
+      const canvas = document.getElementById("map") as HTMLCanvasElement;
+      const context = canvas.getContext("2d")!;
+      const { data } = context.getImageData(0, 0, canvas.width, Math.round(canvas.height * 0.05));
+      for (let index = 3; index < data.length; index += 4) if (data[index]) return true;
+      return false;
+    })).toBe(false);
+  });
+});

@@ -2,6 +2,7 @@
 // Same look settings as the in-game map (Settings → Mini map), live via the settings event.
 // Hidden outside a race: the map fades out on race_end and stays gone until the next lobby / race (?showInLobby=1
 // draws it during the lobby too).
+// Query: ?token=  &mapTitle=0 (hide the map name + author above the box)
 // Query: ?token=  &names=1 (labels)  &leaderBig=1  &aspect=16:9  &track=%23fff  &bg=%23000  &alpha=0  &marker=3
 import { query, tokenQuery } from "./lib/query.js";
 import { MINIMAP_DEFAULTS } from "./lib/defaults.js";
@@ -39,6 +40,7 @@ function applyLook(saved) {
   for (const key of ["track", "bg", "alpha", "marker", "pad"]) if (query.get(key)) look[key] = key === "track" || key === "bg" ? query.get(key) : +query.get(key);
   if (query.get("names") != null) look.names = query.get("names") === "1";
   if (query.get("showInLobby") != null) look.showInLobby = query.get("showInLobby") === "1";
+  if (query.get("mapTitle") != null) look.mapTitle = query.get("mapTitle") === "1";
   if (query.get("leaderBig") != null) look.leaderBig = query.get("leaderBig") === "1";
   if (query.get("aspect")) look.aspect = query.get("aspect");
   fit();
@@ -51,14 +53,17 @@ function aspectRatio() {
   const match = /^(\d+(?:\.\d+)?)\s*[:x\/]\s*(\d+(?:\.\d+)?)$/.exec(aspect);
   return match ? +match[1] / +match[2] : 16 / 9;
 }
+// Room kept above the box for the map name and its author.
+const titleHeight = () => (look.mapTitle === false ? 0 : Math.max(18, Math.min(34, innerHeight * 0.06)));
+
 function fit() {
   const dpr = devicePixelRatio || 1;
   canvas.style.width = innerWidth + "px"; canvas.style.height = innerHeight + "px";
   canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
-  const ratio = aspectRatio();
+  const ratio = aspectRatio(), title = titleHeight();
   boxWidth = innerWidth; boxHeight = boxWidth / ratio;
-  if (boxHeight > innerHeight) { boxHeight = innerHeight; boxWidth = boxHeight * ratio; }
-  boxLeft = (innerWidth - boxWidth) / 2; boxTop = (innerHeight - boxHeight) / 2;
+  if (boxHeight > innerHeight - title) { boxHeight = innerHeight - title; boxWidth = boxHeight * ratio; }
+  boxLeft = (innerWidth - boxWidth) / 2; boxTop = title + (innerHeight - title - boxHeight) / 2;
   context.setTransform(dpr, 0, 0, dpr, boxLeft * dpr, boxTop * dpr);
   draw();
 }
@@ -103,6 +108,7 @@ function draw() {
   if (!visible()) return;
   context.fillStyle = hexToRgba(look.bg, look.alpha);
   roundRect(0, 0, boxWidth, boxHeight, 10); context.fill();
+  drawMapTitle();
   const toScreen = projector();
   if (!toScreen || route.length < 2) return;
   context.lineCap = "round"; context.lineJoin = "round";
@@ -124,6 +130,22 @@ function draw() {
     dots.push({ vehicle, px, py, radius });
   }
   if (look.names) drawLabels(dots, dotSize);
+}
+
+// "Locate Yourself · by MindZoneRL" above the box, in the accent colour.
+function drawMapTitle() {
+  const map = snapshot?.map; const title = titleHeight();
+  if (look.mapTitle === false || !map?.name || !title) return;
+  const fontSize = Math.max(11, title * 0.62);
+  context.font = `700 ${fontSize}px "Chakra Petch", sans-serif`;
+  context.textAlign = "center"; context.textBaseline = "alphabetic";
+  const author = map.creator ? `  ·  by ${map.creator}` : "";
+  const text = map.name + author;
+  context.lineWidth = 3; context.strokeStyle = "rgba(0,0,0,.85)"; context.lineJoin = "round";
+  context.strokeText(text, boxWidth / 2, -title * 0.28);
+  context.fillStyle = look.track || "#fff";
+  context.fillText(text, boxWidth / 2, -title * 0.28);
+  context.textAlign = "left";
 }
 
 // Names to the right of their dot, and they stay there: no flipping, no pushing apart (the projector leaves room).
