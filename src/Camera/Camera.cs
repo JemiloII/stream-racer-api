@@ -169,16 +169,35 @@ static partial class Cam
     // Cars are driven by physics, which steps at a fixed rate well under the frame rate. Without interpolation a car's
     // transform only moves on a physics step, so against a camera that moves every frame the cars and their name labels
     // shudder. Interpolation is purely visual: it changes nothing about how the cars drive.
+    static int _bodiesSmoothed;
+    /// What the camera is working with: physics rate, frame rate, and how many car bodies are interpolating.
+    public static object MotionDto() => new
+    {
+        physicsHz = Time.fixedDeltaTime > 0 ? Mathf.Round(1f / Time.fixedDeltaTime) : 0f,
+        frameHz = Time.smoothDeltaTime > 0 ? Mathf.Round(1f / Time.smoothDeltaTime) : 0f,
+        vSync = QualitySettings.vSyncCount,
+        targetFrameRate = Application.targetFrameRate,
+        bodiesInterpolating = _bodiesSmoothed,
+        cars = Game.Vehicles().Count,
+        mode = Mode.ToApiString(),
+        smoothStepCap = MaxSmoothStep,
+        catchUpSpeed = CatchUpSpeed,
+    };
+
     public static IEnumerator KeepCarsSmooth()
     {
         while (Game.Running)
         {
+            _bodiesSmoothed = 0;
             foreach (var vehicle in Game.Vehicles())
             {
                 var car = vehicle?.Car();
                 if (car == null) continue;
-                var body = car.GetComponent<Rigidbody>() ?? car.GetComponentInChildren<Rigidbody>();
-                if (body != null && body.interpolation == RigidbodyInterpolation.None) body.interpolation = RigidbodyInterpolation.Interpolate;
+                foreach (var body in car.transform.root.GetComponentsInChildren<Rigidbody>(true))
+                {
+                    if (body.interpolation == RigidbodyInterpolation.None) body.interpolation = RigidbodyInterpolation.Interpolate;
+                    if (body.interpolation == RigidbodyInterpolation.Interpolate) _bodiesSmoothed++;
+                }
             }
             yield return new WaitForSeconds(2f);   // cheap: catches cars that join or respawn mid-race
         }
@@ -187,7 +206,11 @@ static partial class Cam
     // How much time a smoothing step may use. A long frame (a hitch, a stream encoder spike) would otherwise let the
     // camera lurch the whole way to its target in one go, which reads as a jolt rather than a move.
     public const float MaxSmoothStep = 0.05f;
-    public static float SmoothDelta => Mathf.Min(Time.deltaTime, MaxSmoothStep);
+    public const float CatchUpSpeed = 60f;   // how much faster than the shot itself the camera may move, to close a gap
+    static Vector3 _lastWanted;
+    // Unity's own averaged frame time. Raw deltaTime swings frame to frame while the encoder and the game fight for
+    // the GPU, and easing against a swinging delta makes the camera speed swing with it, which reads as shake.
+    public static float SmoothDelta => Mathf.Min(Time.smoothDeltaTime > 0f ? Time.smoothDeltaTime : Time.deltaTime, MaxSmoothStep);
 
     // The game positions the name labels in CarLabel.LateUpdate. If that ran before our camera move this frame,
     // labels lag one frame behind the cars and stutter. Re-place them after we move the camera.

@@ -35,6 +35,7 @@ static class Routes
         if (method == "GET" && root == "camera") return target == "pose" ? Cam.Pose() : Cam.State;
         if (method == "GET" && root == "screen") return Game.ScreenState();
         if (method == "GET" && root == "track") return target == "zones" ? Game.ZonesDto() : Game.TrackDto(query["raw"] == "1");
+        if (method == "GET" && root == "motion") return Cam.MotionDto();   // physics rate vs frame rate: why a shot might look rough
         if (method == "GET" && root == "find") // dev aid: GameObjects whose name contains q, with path + components + text
         {
             string needle = (query["q"] ?? "").ToLowerInvariant(); int max = int.TryParse(query["max"], out var parsedMax) ? parsedMax : 80;

@@ -264,10 +264,16 @@ static partial class Cam
         // Pack is the exception: its anchor car can change, so ease position there to avoid a snap.
         bool eased = Mode is CameraMode.Pack or CameraMode.Side or CameraMode.High;
         float ease = Mode == CameraMode.Pack ? 1.4f : 2f;     // the group shots drift, they never dart
+        // How fast the shot itself is travelling, in units per second. The speed limit below is set from this rather
+        // than from a fixed number: a fixed limit was slower than a boosting car, so the camera crawled behind the
+        // pack at a constant speed and juddered as it fought the clamp every frame. It only exists to stop a jump
+        // when the shot re-aims, so it allows the camera to match the cars and close a gap on top of that.
+        float shotSpeed = _firstFrame ? 0f : Vector3.Distance(wanted, _lastWanted) / Mathf.Max(0.0001f, SmoothDelta);
+        _lastWanted = wanted;
         if (eased && !_firstFrame)
         {
             var next = Vector3.Lerp(_position, wanted, 1f - Mathf.Exp(-SmoothDelta * ease));
-            float maxStep = 45f * SmoothDelta;                        // never faster than a car
+            float maxStep = (shotSpeed + CatchUpSpeed) * SmoothDelta;
             _position = Vector3.Distance(next, _position) > maxStep ? _position + (next - _position).normalized * maxStep : next;
         }
         else _position = wanted;

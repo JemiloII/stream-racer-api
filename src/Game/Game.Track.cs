@@ -70,6 +70,7 @@ static partial class Game
             length = circuit?.Length() ?? 0f, finishAt = Vehicles().Select(FinishAt).DefaultIfEmpty(0f).Max(),
             finishLineAt = FinishLine(out _, out _, out var finishLineDistance) ? finishLineDistance : -1f,
             raceDistance = RaceDistance,
+            usedForPercent = Vehicles().Select(FinishDistance).DefaultIfEmpty(0f).Max(),
             roadFraction = Pure.RoadFraction(circuit?.Waypoints()?.Where(waypoint => waypoint != null).Select(waypoint => waypoint.position).ToList()),
             zones = BoostZones().Select(zone => new { start = zone[0], end = zone[1], length = zone[1] - zone[0] }).ToList(),
         };
@@ -100,32 +101,46 @@ static partial class Game
         if (circuit == null) { position = direction = Vector3.zero; distance = -1f; return false; }
         if (!ReferenceEquals(_finishCircuit, circuit) || _finishDistance < 0)
         {
-            GameObject trigger = null;
-            try { trigger = GameObject.FindGameObjectsWithTag("FinishLine").FirstOrDefault(); } catch { }
-            if (trigger == null) { position = direction = Vector3.zero; distance = -1f; return false; }
-            // Map the road once, then read the answer off the map. The track never moves, so this is measured, not
-            // guessed: sample the route from the grid to where the road ends, then find the exact point where that
-            // line of road crosses the finish line. That distance is 100%.
-            var line = trigger.transform.position;
+            GameObject[] triggers;
+            try { triggers = GameObject.FindGameObjectsWithTag("FinishLine"); } catch { triggers = null; }
+            if (triggers == null || triggers.Length == 0) { position = direction = Vector3.zero; distance = -1f; return false; }
+
+            // Map the road once, then read the answer off it. Sample the whole route, then for each object wearing the
+            // finish tag find where the road crosses it. A map can tag more than one gate, and a lap crosses its own
+            // line leaving the grid, so anything in the first part of the route is the start, not the finish: the
+            // answer is the furthest crossing along the road.
             float loop = circuit.Length() > 0 ? circuit.Length() : 5000f;
-            var waypoints = circuit.Waypoints()?.Where(waypoint => waypoint != null).Select(waypoint => waypoint.position).ToList() ?? new List<Vector3>();
-            float road = Mathf.Min(loop, loop * Pure.RoadFraction(waypoints) + 40f);   // a little past the end so the line sits inside
-            var positions = new List<Vector3>((int)(road / SampleEvery) + 2); var along = new List<float>(positions.Capacity);
-            var throughLine = Vector3.forward; float nearestError = float.MaxValue, nearestAt = 0f;
-            for (float at = 0f; at <= road; at += SampleEvery)
+            var positions = new List<Vector3>((int)(loop / SampleEvery) + 2); var along = new List<float>(positions.Capacity);
+            var directions = new List<Vector3>(positions.Capacity);
+            for (float at = 0f; at <= loop; at += SampleEvery)
             {
                 var point = circuit.GetRoutePoint(at);
-                positions.Add(point.Position()); along.Add(at);
-                float error = Vector3.Distance(point.Position(), line);
-                if (error < nearestError) { nearestError = error; nearestAt = at; throughLine = point.Direction(); }
+                positions.Add(point.Position()); along.Add(at); directions.Add(point.Direction());
             }
-            // A finish line is built square across the road, so the road's own direction where it meets the line is
-            // the line's normal: which side of it a point sits on.
-            float crossing = Pure.FinishCrossing(positions, along, line, throughLine);
-            var facing = throughLine; facing.y = 0f; facing.Normalize();
-            _finishPosition = line; _finishDirection = facing;
-            _finishDistance = crossing > 1f ? crossing : nearestAt;   // nothing crossed it: fall back on the closest the road comes
-            _finishCircuit = circuit; _raceDistance = _finishDistance;
+
+            float best = -1f; var bestLine = triggers[0].transform.position; var bestFacing = Vector3.forward;
+            float earliest = loop * 0.35f;   // a crossing before this is the start line, whatever it is tagged
+            foreach (var trigger in triggers)
+            {
+                if (trigger == null) continue;
+                var line = trigger.transform.position;
+                // A finish line is built square across the road, so the road's direction where it meets the line is
+                // the line's normal: which side of it a point sits on.
+                int nearest = 0; float nearestError = float.MaxValue;
+                for (int i = 0; i < positions.Count; i++)
+                {
+                    float error = Vector3.Distance(positions[i], line);
+                    if (error < nearestError) { nearestError = error; nearest = i; }
+                }
+                if (nearestError > 60f) continue;                       // the road never really comes to this gate
+                float crossing = Pure.FinishCrossing(positions, along, line, directions[nearest]);
+                if (crossing < earliest) crossing = along[nearest] < earliest ? -1f : along[nearest];
+                if (crossing > best) { best = crossing; bestLine = line; bestFacing = directions[nearest]; }
+            }
+
+            bestFacing.y = 0f; bestFacing.Normalize();
+            _finishPosition = bestLine; _finishDirection = bestFacing;
+            _finishDistance = best; _finishCircuit = circuit; _raceDistance = best;
         }
         position = _finishPosition; direction = _finishDirection; distance = _finishDistance; return true;
     }

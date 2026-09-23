@@ -76,10 +76,14 @@ static partial class Game
 
     public static float FinishDistance(Vehicle vehicle)
     {
-        // The track itself is the answer: how far along the route the finish line sits. Only when the route can't be
-        // read do we fall back on what the first finisher actually covered.
-        if (FinishLine(out _, out _, out var lineDistance) && lineDistance > 1f) return lineDistance;
+        // Three sources, best first. What the first car to finish actually covered is exact, so it wins outright once
+        // a race has one. Before that, the distance measured off the track, but only when it agrees roughly with the
+        // game's own idea of the finish: a mapped value far from it means the wrong gate was matched, and a percent
+        // built on that would be badly wrong for everyone. The game's own number is the floor, never a silly answer.
+        float gameFinish = Mathf.Max(FinishAt(vehicle), 1f);
         if (_learnedFinish > 1f) return _learnedFinish;
+        if (FinishLine(out _, out _, out var mapped) && mapped > gameFinish * 0.6f && mapped < gameFinish * 1.8f) return mapped;
+        if (gameFinish > 1f) return gameFinish;
         float routeLength = Instances.WaypointController?.GetCircuit()?.Length() ?? 0f;
         return routeLength > 1f ? routeLength : Mathf.Max(FinishAt(vehicle), 1f);
     }
