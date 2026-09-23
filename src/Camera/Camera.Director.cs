@@ -76,6 +76,12 @@ static partial class Cam
                 float yaw = Mathf.Atan2(look.x, look.z) * Mathf.Rad2Deg;
                 position = Quaternion.Euler(22f, yaw, 0f) * new Vector3(0, 0, -40f) + anchor; lookAt = anchor; return true;
             }
+            case "chase":
+            {
+                if (car?.Car() == null) return false;
+                var anchor = Anchor(car).position; var forward = Heading(car);
+                position = anchor - forward * 18f + Vector3.up * 7f; lookAt = anchor + forward * 12f + Vector3.up; return true;
+            }
             case "high":
                 position = centroid - direction * (45f + spread * 0.35f) + sideVector * 25f + Vector3.up * (35f + spread * 0.25f); lookAt = centroid + direction * 12f; return true;
             case "high2":
@@ -188,7 +194,13 @@ static partial class Cam
                 if (key == _lastCutKey || !On(key) || !CandidatePose(kind, car, out var position, out var lookAt)) return;
                 int inView = InViewCount(position, lookAt, 60f, out bool hasLeader); candidates.Add((key, take, inView, hasLeader));
             }
-            foreach (var vehicle in top) { var followed = vehicle; Consider("wide:" + Game.Login(followed), "followwide", followed, () => FollowWide(followed)); }
+            // Shots from behind a car come first: that is the view racers need to judge a straight and spend a boost.
+            foreach (var vehicle in top)
+            {
+                var followed = vehicle;
+                Consider("wide:" + Game.Login(followed), "followwide", followed, () => FollowWide(followed));
+                Consider("chase:" + Game.Login(followed), "chase", followed, () => Chase(followed, 0, 60f, 60f));
+            }
             Consider("high", "high", null, () => High(0, 60f, 60f));
             Consider("high2", "high2", null, HighOtherSide);
             Consider("side", "side", null, () => Side(0, 60f, 60f));
@@ -196,7 +208,8 @@ static partial class Cam
             Consider("sweep", "sweep", null, () => Sweep(0, 60f, 60f));
             if (candidates.Count == 0) continue;
             bool needLeader = _leaderDue || !leaderIn;
-            var pick = candidates.OrderByDescending(candidate => candidate.inView + (needLeader && candidate.hasLeader ? 2 : 0) + (candidate.key.StartsWith("wide") ? 1 : 0)).First();
+            int behindBonus(string key) => key.StartsWith("chase") ? 4 : key.StartsWith("wide") ? 3 : key == "pack" || key == "high" || key == "high2" ? 1 : 0;
+            var pick = candidates.OrderByDescending(candidate => candidate.inView + (needLeader && candidate.hasLeader ? 2 : 0) + behindBonus(candidate.key)).First();
             if (pick.take()) { NoteCut(pick.key); _leaderDue = !pick.hasLeader; }
         }
     }

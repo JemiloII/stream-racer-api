@@ -59,3 +59,4 @@ BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `
 - Director: a brief overhead (`Cam.OverheadHold` 5 s) cycles in every `Cam.OverheadEvery` (35 s) so viewers can see the whole field; gated by the `overhead` shot switch on the Camera page.
 - Percent: `Game.FinishDistance` prefers the finish-line trigger, treats a trigger found near route distance 0 as a lap finish (= route length), and never reports 100 until the car has actually finished.
 - Horizontal bar spacing: `overlay.spreadMode` "field" (default; the leader paces the bar and the field is stretched out behind by their gap) or "track" (raw progress); `?spreadMode=`.
+- Director shot ranking: behind-the-car views win (chase +4, wide follow +3, pack/high +1 on top of coverage) so racers can read the road ahead and time a boost.
