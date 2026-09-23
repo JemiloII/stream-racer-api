@@ -67,11 +67,28 @@ static partial class Game
     //   2. the finish-line trigger's distance along the route,
     //   3. the route length, since the game's own target sits well short of the line and would read 100 early.
     static float _learnedFinish = -1f;
-    public static void ForgetLearnedFinish() => _learnedFinish = -1f;
+    /// The exact racing distance, once a car has finished this race. -1 before that.
+    public static float LearnedFinish => _learnedFinish;
+    public static void ForgetLearnedFinish() { _learnedFinish = -1f; _lastProgress.Clear(); }
+    // The exact racing distance is what the first car over the line had covered. The catch: the moment a car
+    // finishes the game slams its progress to a billion so it sorts to the top of the order, so by the time we are
+    // told about the finish the real number is gone. So keep the last real one for every car as they drive.
+    static readonly Dictionary<string, float> _lastProgress = new();
+    static float Believable => (Instances.WaypointController?.GetCircuit()?.Length() ?? 0f) is float route && route > 1f ? route * 1.2f : 100000f;
+    public static void RememberProgress(Vehicle vehicle)
+    {
+        string login = Login(vehicle);
+        float covered = vehicle?.Progress() ?? 0f;
+        if (login != null && covered > 1f && covered < Believable) _lastProgress[login] = covered;
+    }
+
     public static void LearnFinishDistance(Vehicle finisher)
     {
         float covered = finisher?.Progress() ?? 0f;
-        if (covered > 1f && (_learnedFinish < 1f || covered < _learnedFinish)) _learnedFinish = covered;
+        if (covered <= 1f || covered > Believable)                                  // the billion marker: use the last real one
+            covered = Login(finisher) != null && _lastProgress.TryGetValue(Login(finisher), out var last) ? last : 0f;
+        if (covered <= 1f) return;
+        if (_learnedFinish < 1f || covered < _learnedFinish) _learnedFinish = covered;
     }
 
     public static float FinishDistance(Vehicle vehicle)
@@ -81,8 +98,10 @@ static partial class Game
         // game's own idea of the finish: a mapped value far from it means the wrong gate was matched, and a percent
         // built on that would be badly wrong for everyone. The game's own number is the floor, never a silly answer.
         float gameFinish = Mathf.Max(FinishAt(vehicle), 1f);
+        bool measured = FinishLine(out _, out _, out var mapped) && mapped > 1f;
         if (_learnedFinish > 1f) return _learnedFinish;
-        if (FinishLine(out _, out _, out var mapped) && mapped > gameFinish * 0.6f && mapped < gameFinish * 1.8f) return mapped;
+        if (measured && gameFinish <= 1f) return mapped;                                          // nothing to check it against
+        if (measured && mapped > gameFinish * 0.6f && mapped < gameFinish * 1.8f) return mapped;
         if (gameFinish > 1f) return gameFinish;
         float routeLength = Instances.WaypointController?.GetCircuit()?.Length() ?? 0f;
         return routeLength > 1f ? routeLength : Mathf.Max(FinishAt(vehicle), 1f);
@@ -105,7 +124,7 @@ static partial class Game
             color = "#" + ColorUtility.ToHtmlStringRGB(profile.Color()),
             sub = profile.IsSubscriber(),
             type = vehicle.Type().ToString(),
-            progress = vehicle.Progress(),
+            progress = vehicle.HasFinished() ? FinishDistance(vehicle) : vehicle.Progress(),   // finished cars carry the game's sort marker, not a distance
             finishAt = FinishAt(vehicle),
             pct = ProgressPercent(vehicle),
             finished = vehicle.HasFinished(),
@@ -126,6 +145,7 @@ static partial class Game
     public static object PosFrame()
     {
         var ranked = Ranked();
+        foreach (var vehicle in ranked) RememberProgress(vehicle);   // 60 Hz: the sharpest reading of where each car is
         var frame = new List<object[]>(ranked.Count);
         for (int i = 0; i < ranked.Count; i++)
         {
@@ -192,6 +212,7 @@ static partial class Game
         if (!_wasRunning) { _wasRunning = true; _runningSince = Time.time; } // the green light, not the countdown
         foreach (var vehicle in Vehicles())
         {
+            RememberProgress(vehicle);
             var state = StateOf(vehicle);
             bool bad = state.IsCrashed();
             if (bad) { if (!_badSince.ContainsKey(vehicle)) _badSince[vehicle] = Time.time; }

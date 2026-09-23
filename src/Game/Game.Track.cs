@@ -71,6 +71,7 @@ static partial class Game
             finishLineAt = FinishLine(out _, out _, out var finishLineDistance) ? finishLineDistance : -1f,
             raceDistance = RaceDistance,
             usedForPercent = Vehicles().Select(FinishDistance).DefaultIfEmpty(0f).Max(),
+            learnedFromFinisher = LearnedFinish,
             roadFraction = Pure.RoadFraction(circuit?.Waypoints()?.Where(waypoint => waypoint != null).Select(waypoint => waypoint.position).ToList()),
             zones = BoostZones().Select(zone => new { start = zone[0], end = zone[1], length = zone[1] - zone[0] }).ToList(),
         };
