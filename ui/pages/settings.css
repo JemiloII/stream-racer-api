@@ -51,3 +51,11 @@
 .mmlink input[readonly] { color: var(--hazard); }
 .mmlink button { margin: 0; height: 34px; white-space: nowrap; }
 @media (max-width: 900px) { .mmlink, .mmlink.lblink { grid-template-columns: 1fr 1fr; } }
+
+.aligns { display: flex; gap: 22px; flex-wrap: wrap; margin: 6px 0 2px; }
+.align-field { margin: 0; font-size: 12px; color: var(--dim); }
+.align-picker { display: flex; gap: 4px; margin-top: 3px; }
+.align-picker button { margin: 0; width: 34px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--line-2); color: var(--dim); border-radius: 3px; }
+.align-picker button:hover { color: #eef0f2; border-color: #eef0f2; }
+.align-picker button.on { background: var(--hazard); border-color: var(--hazard); color: #000; }
+.align-picker svg { fill: currentColor; display: block; }

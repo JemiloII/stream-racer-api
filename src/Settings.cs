@@ -44,6 +44,7 @@ static class Settings
         public bool respawnCommandEnabled = true; // viewers can respawn their own car from chat
         public int respawnLimit = 0;               // chat respawns per racer per race: 0 = off (default), -1 = unlimited
         public string respawnCommand = "!race respawn|!respawn"; // aliases separated by | or , (Pure.CommandAliases)
+        public string showCommand = "!race show|!show";   // pops your name onto the mini map for a few seconds
         public string colorCommand = "!race color|!color";       // e.g. "!color #ff8800" or "!color red"
         public bool chatReplies = true; // confirm chat commands in Twitch chat through the game's own connection (Game.SayInChat)
         public CameraOpts camera = new(); // director shot toggles: camera.shots.{grid,high,side,sweep,pack,front,chase,orbit,overhead,prop,finish,duel,pileup,boom}
@@ -68,6 +69,7 @@ static class Settings
     public static bool IsBot(string login) => login != null && (Bots.Contains(login.ToLowerInvariant()) || Current.customBots.Any(bot => bot.login == login.ToLowerInvariant()));
     public static Entry CustomBot(string login) => login == null ? null : Current.customBots.FirstOrDefault(bot => bot.login == login.ToLowerInvariant());
     public static List<string> RespawnCommands => Pure.CommandAliases(Current.respawnCommand);
+    public static List<string> ShowCommands => Pure.CommandAliases(Current.showCommand);
     public static List<string> ColorCommands => Pure.CommandAliases(Current.colorCommand);
     public static Dictionary<string, bool> Shots => Current.camera?.shots;
 
@@ -113,6 +115,7 @@ static class Settings
         model.twitchToken = Pure.CleanToken(model.twitchToken); model.twitchClientId = (model.twitchClientId ?? "").Trim();
         if (model.twitchToken != Current.twitchToken || model.twitchClientId != Current.twitchClientId) Game.ForgetFollowers(); // a new token: redo the lookups
         if (string.IsNullOrWhiteSpace(model.respawnCommand)) model.respawnCommand = "!race respawn|!respawn";
+        if (string.IsNullOrWhiteSpace(model.showCommand)) model.showCommand = "!race show|!show";
         if (string.IsNullOrWhiteSpace(model.colorCommand)) model.colorCommand = "!race color|!color";
         Upgrade(model);
         foreach (var key in Pure.ShotKeys) if (!model.camera.shots.ContainsKey(key)) model.camera.shots[key] = true; // a partial PUT never switches shots off by accident
@@ -126,7 +129,7 @@ static class Settings
     public static object WithConfig() => new
     {
         Current.autoJoinStreamer, Current.streamerColor, Current.autoJoin, Current.customBots,
-        Current.colorLeaderboard, Current.leaderboardAvatars, Current.leaderboardPercent, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.respawnLimit, Current.chatReplies, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
+        Current.colorLeaderboard, Current.leaderboardAvatars, Current.leaderboardPercent, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.showCommand, Current.respawnLimit, Current.chatReplies, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
         followerChecks = Game.FollowerChecks, followerChecksError = Game.FollowerCheckError, camera = Current.camera, Current.ui, Current.overlay, minimap = Minimap.State, bots = Bots,
         config = ConfigDto(),
     };

@@ -72,7 +72,7 @@ static partial class Game
         rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
         rect.pivot = new Vector2(0f, 0.5f);
         rect.sizeDelta = new Vector2(size, size);
-        rect.anchoredPosition = new Vector2(14f, 0f);   // just clear of the colour bar and the place number
+        rect.anchoredPosition = new Vector2(-6f, 0f);   // hugging the place number, just right of the colour bar
         var holderImage = holder.GetComponent<Image>();
         holderImage.sprite = DiscSprite(); holderImage.type = Image.Type.Simple; holderImage.raycastTarget = false;
         holder.AddComponent<Mask>().showMaskGraphic = false;   // the disc masks the picture into a circle
@@ -83,7 +83,7 @@ static partial class Game
         var image = picture.GetComponent<Image>();
         image.preserveAspect = true; image.raycastTarget = false; image.enabled = false;
         // the name starts after the picture (the offset is applied once; a second pass would keep pushing it)
-        nameText.offsetMin = new Vector2(Mathf.Max(nameText.offsetMin.x, size + 26f), nameText.offsetMin.y);   // and the name clear of the picture
+        nameText.offsetMin = new Vector2(Mathf.Max(nameText.offsetMin.x, size + 6f), nameText.offsetMin.y);   // and the name clear of the picture
         return rect;
     }
 

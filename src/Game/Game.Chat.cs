@@ -68,6 +68,12 @@ static partial class Game
     {
         if (string.IsNullOrEmpty(login) || string.IsNullOrEmpty(message)) return;
         login = login.ToLowerInvariant(); displayName = string.IsNullOrEmpty(displayName) ? login : displayName;
+        if (Pure.CommandArg(message, Settings.ShowCommands) == "")
+        {
+            Minimap.RevealName(login);
+            Plugin.Emit("show", new { login, displayName, seconds = Minimap.RevealSeconds });
+            return;
+        }
         if (Settings.Current.respawnCommandEnabled && Pure.CommandArg(message, Settings.RespawnCommands) == "")
         {
             var mine = Find(login); if (mine == null) return;

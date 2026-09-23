@@ -86,7 +86,13 @@ static class Patches
     [HarmonyPostfix, HarmonyPatch(typeof(TwitchCommandListener), GameNames.ChatMessageReceived)]
     static void OnChat([HarmonyArgument(GameNames.ChatMessageArg)] TwitchLib.Client.Events.OnMessageReceivedArgs args)
     {
-        try { var message = args?.ChatMessage; if (message != null) Game.OnChatMessage(message.Username, message.Message, message.DisplayName); } catch { }
+        try
+        {
+            var message = args?.ChatMessage; if (message == null) return;
+            Game.NoteTwitchColor(message.Username, message.ColorHex);   // their own chat colour, used when they never picked one
+            Game.OnChatMessage(message.Username, message.Message, message.DisplayName);
+        }
+        catch { }
     }
 
     // AI driver's per-frame speed logic overwrites the multiplier; reapply ours after it.

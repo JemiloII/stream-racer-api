@@ -45,10 +45,32 @@ static partial class Game
         if (labelObject != null) foreach (var text in labelObject.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true)) text.color = color;
     }
 
+    // Their Twitch chat colour, remembered from any message they send: the fallback when they never picked one, so
+    // nobody ends up plain white.
+    static readonly Dictionary<string, string> _twitchColors = new();
+    public static void NoteTwitchColor(string login, string hex)
+    {
+        if (string.IsNullOrEmpty(login) || string.IsNullOrWhiteSpace(hex) || hex.ToUpperInvariant() == "#FFFFFF") return;
+        login = login.ToLowerInvariant();
+        bool isNew = !_twitchColors.TryGetValue(login, out var known) || known != hex;
+        _twitchColors[login] = hex;
+        if (!isNew || Settings.Current.colors.ContainsKey(login)) return;
+        var vehicle = Find(login); if (vehicle != null) ApplySavedColor(vehicle);
+    }
+
+    /// What colour a racer should be: what they chose, else their Twitch chat colour, else the game's own.
+    public static bool PreferredColor(string login, out Color color)
+    {
+        color = Color.white;
+        login = (login ?? "").ToLowerInvariant();
+        if (Settings.Current.colors.TryGetValue(login, out var chosen) && ParseColor(chosen, out color)) return true;
+        return _twitchColors.TryGetValue(login, out var chat) && ParseColor(chat, out color);
+    }
+
     // Apply a remembered color when someone joins (runs from the AddVehicle prefix and postfix).
     public static void ApplySavedColor(Vehicle vehicle)
     {
-        if (Settings.Current.colors.TryGetValue(Login(vehicle) ?? "", out var hex) && ParseColor(hex, out var color)) vehicle.Profile().SetColor(color);
+        if (PreferredColor(Login(vehicle), out var color)) vehicle.Profile().SetColor(color);
     }
 
     // In-game leaderboard: paint each row's name in the car's color (or back to white when turned off).

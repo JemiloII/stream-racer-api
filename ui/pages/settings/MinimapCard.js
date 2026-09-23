@@ -5,6 +5,7 @@ import { html } from "../../lib/html.js";
 import { useStore } from "../../store.js";
 import { MINIMAP_DEFAULTS, MINIMAP_RATIOS } from "../../lib/defaults.js";
 import { NumberField, SelectField } from "./fields.js";
+import AlignPicker from "./AlignPicker.js";
 
 const ratioLabel = (ratio) => (ratio === "auto" ? "auto (track shape)" : ratio);
 
@@ -34,7 +35,12 @@ export default function MinimapCard() {
       <p class="hint">In-game: drawn inside the game window (so it's on stream). Position and width are fractions of the screen from the bottom-left; height follows the track's shape unless you set it. Browser: links below.</p>
       <div class="ovgrid">
         <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.enabled} onChange=${(event) => setMinimap("enabled", event.target.checked)} /><span>Show the mini map inside the game (the /minimap browser source always works)</span></label>
-      <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.mapTitle !== false} onChange=${(event) => setMinimap("mapTitle", event.target.checked)} /><span>Map name and author above the map (in game and browser)</span></label>
+      <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.mapTitle !== false} onChange=${(event) => setMinimap("mapTitle", event.target.checked)} /><span>Map name above the map (in game and browser)</span></label>
+      <label class="switch-row"><input type="checkbox" role="switch" checked=${!!minimap.mapAuthor} onChange=${(event) => setMinimap("mapAuthor", event.target.checked)} /><span>Show who built the map on a line of its own</span></label>
+      <div class="aligns">
+        <${AlignPicker} label="Map name" value=${minimap.mapTitleAlign || "center"} onChange=${(side) => setMinimap("mapTitleAlign", side)} />
+        <${AlignPicker} label="Author" value=${minimap.mapAuthorAlign || "center"} onChange=${(side) => setMinimap("mapAuthorAlign", side)} />
+      </div>
         <${NumberField} values=${minimap} onChange=${setMinimap} name="x" label="Left (0-1)" />
         <${NumberField} values=${minimap} onChange=${setMinimap} name="y" label="Bottom (0-1)" />
         <${NumberField} values=${minimap} onChange=${setMinimap} name="w" label="Width (0-1)" />

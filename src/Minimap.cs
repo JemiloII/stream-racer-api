@@ -18,7 +18,9 @@ static class Minimap
         public float pad = 1.15f;        // margin around the track bounds
         public bool leaderBig = true;
         public bool names = true;        // labels to the right of the dots; they never move (the view leaves room for them)
-        public bool mapTitle = true;     // the map's name and author above the map (in game and on the /minimap page)
+        public bool mapTitle = true;     // the map's name above the map (in game and on the /minimap page)
+        public bool mapAuthor = false;   // and who built it, on a second line
+        public string mapTitleAlign = "center", mapAuthorAlign = "center";   // left | center | right
         public string aspect = "1:1";    // /minimap page: fills the window, keeps this ratio (16:9, 4:3, 1:1, 21:9, auto = track)
     }
     public static Cfg Current = new();
@@ -28,7 +30,7 @@ static class Minimap
     static LineRenderer _line;
     static readonly Dictionary<Vehicle, Transform> _markers = new();
     static readonly Dictionary<Vehicle, TextMesh> _labels = new();
-    static TextMesh _mapTitle;   // "Gherkin Gauntlent · by UnclePickle89" above the map
+    static TextMesh _mapTitle, _mapAuthor;   // the map's name, and who built it, above the map
     static Font _font;
     static Material _material;
     static Bounds _bounds;
@@ -38,7 +40,7 @@ static class Minimap
 
     public static object State => new
     {
-        Current.enabled, Current.x, Current.y, Current.w, Current.h, Current.marker, Current.bg, Current.alpha, Current.track, Current.pad, Current.leaderBig, Current.names, Current.mapTitle, Current.aspect,
+        Current.enabled, Current.x, Current.y, Current.w, Current.h, Current.marker, Current.bg, Current.alpha, Current.track, Current.pad, Current.leaderBig, Current.names, Current.mapTitle, Current.mapAuthor, Current.mapTitleAlign, Current.mapAuthorAlign, Current.aspect,
         live = _camera != null,
     };
 
@@ -63,7 +65,8 @@ static class Minimap
         _halfHeight = Mathf.Max(_bounds.extents.z * Current.pad, (_bounds.extents.x * Current.pad + labelRoom) / boxAspect) + 2f;
         _centerOffsetX = labelRoom / 2f;
         // room at the top for the map title, so it never sits on the track
-        float titleRoom = Current.mapTitle ? (_halfHeight * 2f * Current.marker / 100f) * 3.2f : 0f;   // two lines
+        float titleLines = (Current.mapTitle ? 1.8f : 0f) + (Current.mapAuthor ? 1.5f : 0f);
+        float titleRoom = (_halfHeight * 2f * Current.marker / 100f) * titleLines;
         _halfHeight += titleRoom / 2f;
         _centerOffsetZ = -titleRoom / 2f;
 
@@ -127,6 +130,7 @@ static class Minimap
         foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject);
         _labels.Clear();
         if (_mapTitle != null) { Object.Destroy(_mapTitle.gameObject); _mapTitle = null; }
+        if (_mapAuthor != null) { Object.Destroy(_mapAuthor.gameObject); _mapAuthor = null; }
         if (_line != null) { Object.Destroy(_line.gameObject); _line = null; }
         if (_backdrop != null) { Object.Destroy(_backdrop.gameObject); _backdrop = null; }
         if (_camera != null) { Object.Destroy(_camera.gameObject); _camera = null; }
@@ -160,7 +164,9 @@ static class Minimap
     // with room on the right (Apply), so a label near the edge still fits.
     static void Labels(HashSet<Vehicle> alive, float lift)
     {
-        if (!Current.names) { if (_labels.Count > 0) { foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject); _labels.Clear(); } return; }
+        bool anyRevealed = _revealUntil.Values.Any(until => Time.unscaledTime < until);
+        if (!Current.names && !anyRevealed) { if (_labels.Count > 0) { foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject); _labels.Clear(); } return; }
+        if (!Current.names) alive = new HashSet<Vehicle>(alive.Where(vehicle => Revealed(Game.Login(vehicle))));   // only whoever asked to be shown
         float size = _halfHeight * 2f * Current.marker / 100f;      // world units per dot
         float gap = size * 0.7f;
         foreach (var vehicle in alive)
@@ -178,33 +184,66 @@ static class Minimap
     }
 
     // The map's name and author, centred just above the map box (same idea as the browser page).
+    // The map's name, and optionally who built it, above the map. Each line is aligned on its own (left/center/right)
+    // and hangs down from the top edge into the room Apply() reserved, so nothing can clip off the view.
+    static float _titleLift;
     static void ShowMapTitle(float lift)
     {
-        if (!Current.mapTitle)
-        {
-            if (_mapTitle != null) { Object.Destroy(_mapTitle.gameObject); _mapTitle = null; }
-            return;
-        }
+        _titleLift = lift + 2f;
         var game = Instances.GameController?.CurrentGame();
         string name = game?.MapName();
-        if (string.IsNullOrEmpty(name)) return;
-        string creator = Game.MapCreator(game.MapId());
-        if (_mapTitle == null)
-        {
-            _font ??= Resources.GetBuiltinResource<Font>("Arial.ttf") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            var titleObject = new GameObject("SRMinimap.MapTitle") { layer = Layer };
-            titleObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            _mapTitle = titleObject.AddComponent<TextMesh>();
-            _mapTitle.font = _font; _mapTitle.fontSize = 48; _mapTitle.fontStyle = FontStyle.Bold;
-            _mapTitle.anchor = TextAnchor.UpperCenter; _mapTitle.alignment = TextAlignment.Center;   // hangs down from the top edge, so it can't clip off the view
-            var renderer = titleObject.GetComponent<MeshRenderer>();
-            renderer.material = _font.material; renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
-        }
+        string creator = game != null ? Game.MapCreator(game.MapId()) : null;
+        bool wantTitle = Current.mapTitle && !string.IsNullOrEmpty(name);
+        bool wantAuthor = Current.mapAuthor && !string.IsNullOrEmpty(creator);
+        if (!wantTitle && _mapTitle != null) { Object.Destroy(_mapTitle.gameObject); _mapTitle = null; }
+        if (!wantAuthor && _mapAuthor != null) { Object.Destroy(_mapAuthor.gameObject); _mapAuthor = null; }
+        if (!wantTitle && !wantAuthor) return;
+
         float size = _halfHeight * 2f * Current.marker / 100f;
-        _mapTitle.text = string.IsNullOrEmpty(creator) ? name : name + System.Environment.NewLine + "by " + creator;   // stacked, not side by side
-        _mapTitle.characterSize = size * 0.52f;
-        _mapTitle.color = Parse(Current.track, 1f, Color.white);
-        _mapTitle.transform.position = new Vector3(_bounds.center.x + _centerOffsetX, lift + 2f, _camera.transform.position.z + _halfHeight * 0.99f);
+        float top = _camera.transform.position.z + _halfHeight * 0.99f;
+        var color = Parse(Current.track, 1f, Color.white);
+        if (wantTitle)
+        {
+            _mapTitle ??= MakeTitleText("SRMinimap.MapTitle");
+            PlaceTitleText(_mapTitle, name, size * 0.52f, color, Current.mapTitleAlign, top);
+        }
+        if (wantAuthor)
+        {
+            _mapAuthor ??= MakeTitleText("SRMinimap.MapAuthor");
+            PlaceTitleText(_mapAuthor, "by " + creator, size * 0.38f, color, Current.mapAuthorAlign, wantTitle ? top - size * 1.6f : top);
+        }
+    }
+
+    // "!race show" / "!show": pops a racer's name onto the map for a few seconds even when names are turned off.
+    static readonly Dictionary<string, float> _revealUntil = new();
+    public const float RevealSeconds = 5f;
+    public static void RevealName(string login, float seconds = RevealSeconds)
+    {
+        if (!string.IsNullOrEmpty(login)) _revealUntil[login.ToLowerInvariant()] = Time.unscaledTime + seconds;
+    }
+    public static bool Revealed(string login) => login != null && _revealUntil.TryGetValue(login.ToLowerInvariant(), out var until) && Time.unscaledTime < until;
+
+    static TextMesh MakeTitleText(string objectName)
+    {
+        _font ??= Resources.GetBuiltinResource<Font>("Arial.ttf") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        var titleObject = new GameObject(objectName) { layer = Layer };
+        titleObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        var text = titleObject.AddComponent<TextMesh>();
+        text.font = _font; text.fontSize = 48; text.fontStyle = FontStyle.Bold;
+        var renderer = titleObject.GetComponent<MeshRenderer>();
+        renderer.material = _font.material; renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
+        return text;
+    }
+
+    static void PlaceTitleText(TextMesh text, string value, float characterSize, Color color, string align, float z)
+    {
+        float halfWidth = _halfHeight * _camera.aspect, centreX = _bounds.center.x + _centerOffsetX;
+        string side = (align ?? "center").Trim().ToLowerInvariant();
+        text.text = value; text.characterSize = characterSize; text.color = color;
+        text.anchor = side == "left" ? TextAnchor.UpperLeft : side == "right" ? TextAnchor.UpperRight : TextAnchor.UpperCenter;
+        text.alignment = side == "left" ? TextAlignment.Left : side == "right" ? TextAlignment.Right : TextAlignment.Center;
+        float x = side == "left" ? centreX - halfWidth + characterSize * 2f : side == "right" ? centreX + halfWidth - characterSize * 2f : centreX;
+        text.transform.position = new Vector3(x, _titleLift, z);
     }
 
     static TextMesh MakeLabel(Vehicle vehicle)

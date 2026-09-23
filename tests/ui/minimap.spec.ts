@@ -104,7 +104,7 @@ test.describe("Mini map race phase", () => {
 test.describe("Map title above the mini map", () => {
   test.beforeEach(async ({ page }) => { await installFakeEvents(page); });
 
-  test("shows the map name and its author while a race is on", async ({ page }) => {
+  test("shows the map name while a race is on", async ({ page }) => {
     const race = { ...racingSnapshot(), map: { id: 234, name: "Locate Yourself", creator: "MindZoneRL" } };
     await mockJson(page, "/settings", { minimap: { alpha: 0.6 } });
     await mockJson(page, "/race", race);
@@ -130,5 +130,42 @@ test.describe("Map title above the mini map", () => {
       for (let index = 3; index < data.length; index += 4) if (data[index]) return true;
       return false;
     })).toBe(false);
+  });
+});
+
+test.describe("Map title options", () => {
+  const raceOn = () => ({ ...racingSnapshot(), map: { id: 234, name: "Locate Yourself", creator: "MindZoneRL" } });
+  const topStripInk = (page: Page, alignSlice: "left" | "right" | "all" = "all") => page.evaluate((slice) => {
+    const canvas = document.getElementById("map") as HTMLCanvasElement;
+    const context = canvas.getContext("2d")!;
+    const height = Math.round(canvas.height * 0.09);
+    const from = slice === "right" ? Math.round(canvas.width * 0.6) : 0;
+    const width = slice === "all" ? canvas.width : Math.round(canvas.width * 0.4);
+    const { data } = context.getImageData(from, 0, width, height);
+    let painted = 0;
+    for (let index = 3; index < data.length; index += 4) if (data[index]) painted += 1;
+    return painted;
+  }, alignSlice);
+
+  test.beforeEach(async ({ page }) => { await installFakeEvents(page); await mockJson(page, "/race", raceOn()); });
+
+  test("the author line is off unless it is switched on", async ({ page }) => {
+    await mockJson(page, "/settings", { minimap: { alpha: 0, mapAuthor: false } });
+    await page.goto("/minimap");
+    const withoutAuthor = await topStripInk(page);
+    await mockJson(page, "/settings", { minimap: { alpha: 0, mapAuthor: true } });
+    await page.goto("/minimap?mapAuthor=1");
+    await expect.poll(() => topStripInk(page)).toBeGreaterThan(withoutAuthor);
+  });
+
+  test("alignment moves the name to the side that was chosen", async ({ page }) => {
+    await mockJson(page, "/settings", { minimap: { alpha: 0 } });
+    await page.goto("/minimap?mapTitleAlign=left");
+    await expect.poll(() => topStripInk(page, "left")).toBeGreaterThan(0);
+    expect(await topStripInk(page, "right")).toBe(0);
+
+    await page.goto("/minimap?mapTitleAlign=right");
+    await expect.poll(() => topStripInk(page, "right")).toBeGreaterThan(0);
+    expect(await topStripInk(page, "left")).toBe(0);
   });
 });

@@ -2,7 +2,7 @@
 // Same look settings as the in-game map (Settings → Mini map), live via the settings event.
 // Hidden outside a race: the map fades out on race_end and stays gone until the next lobby / race (?showInLobby=1
 // draws it during the lobby too).
-// Query: ?token=  &mapTitle=0 (hide the map name + author above the box)
+// Query: ?token=  &mapTitle=0  &mapAuthor=1  &mapTitleAlign=left|center|right  &mapAuthorAlign=…
 // Query: ?token=  &names=1 (labels)  &leaderBig=1  &aspect=16:9  &track=%23fff  &bg=%23000  &alpha=0  &marker=3
 import { query, tokenQuery } from "./lib/query.js";
 import { MINIMAP_DEFAULTS } from "./lib/defaults.js";
@@ -41,6 +41,9 @@ function applyLook(saved) {
   if (query.get("names") != null) look.names = query.get("names") === "1";
   if (query.get("showInLobby") != null) look.showInLobby = query.get("showInLobby") === "1";
   if (query.get("mapTitle") != null) look.mapTitle = query.get("mapTitle") === "1";
+  if (query.get("mapAuthor") != null) look.mapAuthor = query.get("mapAuthor") === "1";
+  if (query.get("mapTitleAlign")) look.mapTitleAlign = query.get("mapTitleAlign");
+  if (query.get("mapAuthorAlign")) look.mapAuthorAlign = query.get("mapAuthorAlign");
   if (query.get("leaderBig") != null) look.leaderBig = query.get("leaderBig") === "1";
   if (query.get("aspect")) look.aspect = query.get("aspect");
   fit();
@@ -54,7 +57,8 @@ function aspectRatio() {
   return match ? +match[1] / +match[2] : 16 / 9;
 }
 // Room kept above the box for the map name and its author.
-const titleHeight = () => (look.mapTitle === false ? 0 : Math.max(34, Math.min(72, innerHeight * 0.13)));   // two lines: name, then the author
+const titleLines = () => (look.mapTitle === false ? 0 : 1) + (look.mapAuthor ? 1 : 0);
+const titleHeight = () => titleLines() * Math.max(20, Math.min(40, innerHeight * 0.07));
 
 function fit() {
   const dpr = devicePixelRatio || 1;
@@ -135,17 +139,22 @@ function draw() {
 // "Locate Yourself · by MindZoneRL" above the box, in the accent colour.
 function drawMapTitle() {
   const map = snapshot?.map; const title = titleHeight();
-  if (look.mapTitle === false || !map?.name || !title) return;
-  const nameSize = Math.max(15, title * 0.46), authorSize = nameSize * 0.72;
-  context.textAlign = "center"; context.textBaseline = "alphabetic";
+  if (!map?.name || !title) return;
+  const lines = titleLines(), lineHeight = title / Math.max(1, lines);
+  const nameSize = Math.max(15, lineHeight * 0.62), authorSize = nameSize * 0.74;
+  context.textBaseline = "alphabetic";
   context.lineWidth = 4; context.strokeStyle = "rgba(0,0,0,.9)"; context.lineJoin = "round";
   context.fillStyle = look.track || "#fff";
-  const draw = (text, size, y) => {
+  const drawLine = (text, size, align, y) => {
+    const side = (align || "center").toLowerCase();
+    context.textAlign = side === "left" ? "left" : side === "right" ? "right" : "center";
+    const x = side === "left" ? 2 : side === "right" ? boxWidth - 2 : boxWidth / 2;
     context.font = `700 ${size}px "Chakra Petch", sans-serif`;
-    context.strokeText(text, boxWidth / 2, y); context.fillText(text, boxWidth / 2, y);
+    context.strokeText(text, x, y); context.fillText(text, x, y);
   };
-  if (map.creator) { draw(map.name, nameSize, -title * 0.5); draw(`by ${map.creator}`, authorSize, -title * 0.12); }
-  else draw(map.name, nameSize, -title * 0.3);
+  let y = -title + lineHeight * 0.78;
+  if (look.mapTitle !== false) { drawLine(map.name, nameSize, look.mapTitleAlign, y); y += lineHeight; }
+  if (look.mapAuthor && map.creator) drawLine(`by ${map.creator}`, authorSize, look.mapAuthorAlign, y);
   context.textAlign = "left";
 }
 
