@@ -14,10 +14,16 @@ static partial class Cam
     static float _lastCutAt; static string _lastCutKey; static bool _wasRunning;
     static Vehicle _lastLeader; static float _lastDuelAt = -100f, _lastOverheadAt = -100f, _runningSince;
     // Every so often, a short look straight down so viewers can see where the whole field is on the track.
-    // Racers use the overhead to judge the straight ahead and time a boost, so it comes round less often but stays
-    // up long enough to read the track.
-    public const float OverheadEvery = 60f, OverheadHold = 9f;
-    static void NoteCut(string key) { _lastCutAt = Time.time; _lastCutKey = key; }
+    // Racers read the overhead to judge the straight ahead and time a boost, so it comes back every couple of cuts.
+    // The clock is only a backstop for when a single shot is held for ages.
+    public const int OverheadEveryCuts = 2;
+    public const float OverheadEvery = 45f, OverheadHold = 9f;
+    static int _cutsSinceOverhead;
+    static void NoteCut(string key)
+    {
+        _lastCutAt = Time.time; _lastCutKey = key;
+        if (key == "overhead") { _cutsSinceOverhead = 0; _lastOverheadAt = Time.time; } else _cutsSinceOverhead++;
+    }
 
     public static void OnBoom(Vehicle vehicle)
     {
@@ -110,7 +116,7 @@ static partial class Cam
             yield return new WaitForSeconds(0.5f);
             if (!Auto) yield break;
             if (!Game.Running) { _wasRunning = false; continue; }
-            if (!_wasRunning) { _wasRunning = true; _runningSince = Time.time; _lastLeader = null; _lastOverheadAt = Time.time; }
+            if (!_wasRunning) { _wasRunning = true; _runningSince = Time.time; _lastLeader = null; _lastOverheadAt = Time.time; _cutsSinceOverhead = 0; }
             if (ManualHold || Time.time < _autoPausedUntil) continue;
             var racing = Racing(); if (racing.Count == 0) continue;
 
@@ -167,13 +173,6 @@ static partial class Cam
                 if (Side(0, 60f, 60f)) { _shotGroup = topTwo; NoteCut("duel"); continue; }
             }
 
-            // a quick overhead every so often: the whole track at once, so nobody loses track of where they are
-            if (On("overhead") && Mode != CameraMode.Overhead && age > 8f && Time.time - _lastOverheadAt > OverheadEvery)
-            {
-                _lastOverheadAt = Time.time;
-                if (Overhead(0, 60f, 60f)) { NoteCut("overhead"); continue; }
-            }
-
             // hold while the shot still shows most of the field (or all but two), unless it's gone stale
             int seen = CurrentCoverage(out bool leaderIn);
             bool good = seen >= Mathf.Max(2, Mathf.CeilToInt(racing.Count * 0.6f)) || seen >= racing.Count - 2;
@@ -186,6 +185,11 @@ static partial class Cam
             if (_lastCutKey == "duel" && age > 10f) cut = true;
             if (_lastCutKey == "overhead" && age > OverheadHold) cut = true;   // a glance, not a stay
             if (!cut) continue;
+
+            // every couple of cuts (or after a long-held shot) the overhead comes back: the whole track at once, so
+            // racers can see the straight ahead and time a boost
+            if (On("overhead") && Mode != CameraMode.Overhead && (_cutsSinceOverhead >= OverheadEveryCuts || Time.time - _lastOverheadAt > OverheadEvery)
+                && Overhead(0, 60f, 60f)) { NoteCut("overhead"); continue; }
 
             // pick the candidate that would show the most cars; prefer ones with the leader; never the same shot again
             var top = racing.Where(vehicle => !Game.CrashedAt.ContainsKey(vehicle)).OrderByDescending(vehicle => vehicle.Progress()).Take(3).ToList();
