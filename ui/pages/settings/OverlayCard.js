@@ -35,7 +35,7 @@ export default function OverlayCard() {
           <${NumberField} values=${overlay} onChange=${setOverlay} name="size" step="1" label="Avatar size (px)" />
           <${NumberField} values=${overlay} onChange=${setOverlay} name="lineHeight" step="1" label="Track line height (px)" />
           <${NumberField} values=${overlay} onChange=${setOverlay} name="spread" step="1" label="Min gap between cars (px; -1 = auto, 0 = raw positions)" />
-          <${NumberField} values=${overlay} onChange=${setOverlay} name="bottom" step="1" label="Track bottom offset (px)" />
+          <${NumberField} values=${overlay} onChange=${setOverlay} name="offsetY" step="1" label="Nudge the bar up/down (px, + is down)" />
           <${NumberField} values=${overlay} onChange=${setOverlay} name="side" step="1" label="Side margin (px, both sources)" />
           <label>Accent color (both sources)<input type="color" value=${overlay.accent} onChange=${(event) => setOverlay("accent", event.target.value)} /></label>
           <label>Track line color<input value=${overlay.line} onBlur=${(event) => event.target.value !== overlay.line && setOverlay("line", event.target.value)} /></label>

@@ -2,6 +2,7 @@
 // plus RIP / boost / finish effects. The vertical top-N list is its own source, /leaderboard.
 // Look & feel comes from the plugin's settings (Settings → Overlay look) and updates live; query params override:
 // ?token=  &size=40  &names=0  &accent=%23ff8a00  &spread=34 (min px between cars, 0 = raw positions)
+// The bar is centred in its own window: size the OBS source to the bar itself, then place it. ?offsetY= nudges it.
 import { query } from "./lib/query.js";
 import { OVERLAY_DEFAULTS } from "./lib/defaults.js";
 import { escapeHtml, ordinal } from "./lib/text.js";
@@ -15,11 +16,12 @@ function applyLook(saved) {
   look = { ...saved };
   if (query.get("size")) look.size = +query.get("size");
   if (query.get("spread") != null) look.spread = +query.get("spread");
+  if (query.get("offsetY") != null) look.offsetY = +query.get("offsetY");
   if (query.get("names") === "0") look.names = false;
   if (query.get("accent")) look.accent = query.get("accent");
   const rootStyle = document.documentElement.style;
   rootStyle.setProperty("--size", look.size + "px"); rootStyle.setProperty("--hazard", look.accent); rootStyle.setProperty("--line", look.line);
-  rootStyle.setProperty("--line-h", look.lineHeight + "px"); rootStyle.setProperty("--bottom", look.bottom + "px"); rootStyle.setProperty("--side", look.side + "px");
+  rootStyle.setProperty("--line-h", look.lineHeight + "px"); rootStyle.setProperty("--nudge", (look.offsetY ?? 0) + "px"); rootStyle.setProperty("--side", look.side + "px");
   document.body.classList.toggle("no-banner", !look.banner);
   document.body.classList.toggle("no-names", !look.names);
   render();

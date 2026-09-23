@@ -1,5 +1,7 @@
-/* OBS browser source, the horizontal bar: everything transparent except the widgets. The top-N list is /leaderboard (leaderboard.css). */
-:root { --size: 40px; --hazard: #ffd400; --line: rgba(255,255,255,.35); --line-h: 6px; --bottom: 28px; --side: 24px; --boom: #ff3b30; --boost: #35e0ff; --live: #3ddc84; --font: "Chakra Petch", Impact, sans-serif; }
+/* OBS browser source, the horizontal bar: everything transparent except the widgets. The top-N list is /leaderboard
+   (leaderboard.css). The bar fills its own window (vertically centred), so size the source to the bar and place it
+   wherever you want in OBS: it is never stuck to the bottom of a full-screen source. */
+:root { --size: 40px; --hazard: #ffd400; --line: rgba(255,255,255,.35); --line-h: 6px; --nudge: 0px; --side: 24px; --boom: #ff3b30; --boost: #35e0ff; --live: #3ddc84; --font: "Chakra Petch", Impact, sans-serif; }
 html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; font-family: var(--font); color: #fff; }
 
 /* ---- race phase: nothing outside a race; race_end fades the cars out (overlay-shared.js swaps the classes) ---- */
@@ -8,7 +10,7 @@ body.race-over #track { opacity: 0; }
 body.no-race #track { display: none; }
 
 /* ---- track ---- */
-#track { position: absolute; left: var(--side); right: var(--side); bottom: var(--bottom); height: calc(var(--size) + 40px); }
+#track { position: absolute; left: var(--side); right: var(--side); top: 50%; height: calc(var(--size) + 40px); transform: translateY(calc(-50% + var(--nudge))); }
 #track { --name-h: 17px; --line-c: calc(var(--name-h) + var(--size) / 2); } /* line centre = circle centre (name sits below the circle) */
 body.no-names #track { --name-h: 0px; }
 #track .line { position: absolute; left: 0; right: 0; bottom: calc(var(--line-c) - var(--line-h) / 2); height: var(--line-h); background: var(--line); border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
@@ -36,7 +38,7 @@ body.no-banner #banner { display: none; }
 @keyframes blink { 50% { opacity: .2; } }
 
 /* ---- banner (RIP / finish): stays up on its own 3 s timer, so a finish banner outlives the fading cars ---- */
-#banner { position: absolute; top: 24px; left: 50%; transform: translateX(-50%) translateY(-20px); opacity: 0; transition: .18s; padding: 8px 18px; background: rgba(0,0,0,.8); border: 2px solid var(--boom); border-radius: 6px; font-size: 26px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+#banner { position: absolute; bottom: calc(50% + var(--size) / 2 + 30px - var(--nudge)); left: 50%; transform: translateX(-50%) translateY(-20px); opacity: 0; transition: .18s; padding: 8px 18px; background: rgba(0,0,0,.8); border: 2px solid var(--boom); border-radius: 6px; font-size: 26px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
 #banner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #banner.fin { border-color: var(--live); }
 #banner b { color: var(--boom); }

@@ -135,3 +135,27 @@ test.describe("Horizontal bar spacing", () => {
     expect(new Set(lefts.map((value) => Math.round(value))).size).toBe(1);
   });
 });
+
+test.describe("Horizontal bar placement", () => {
+  test.beforeEach(async ({ page }) => { await installFakeEvents(page); });
+
+  test("the bar sits in the middle of its own window, not pinned to the bottom", async ({ page }) => {
+    await mockJson(page, "/settings", { overlay: { size: 40 } });
+    await mockJson(page, "/race", racingSnapshot());
+    await page.setViewportSize({ width: 1200, height: 600 });
+    await page.goto("/overlay");
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    const box = (await page.locator("#track").boundingBox())!;
+    expect(box.y + box.height / 2).toBeCloseTo(300, 0);
+  });
+
+  test("?offsetY nudges it down", async ({ page }) => {
+    await mockJson(page, "/settings", { overlay: { size: 40 } });
+    await mockJson(page, "/race", racingSnapshot());
+    await page.setViewportSize({ width: 1200, height: 600 });
+    await page.goto("/overlay?offsetY=50");
+    await expect(page.locator("#racers .racer")).toHaveCount(SAMPLE_LOGINS.length);
+    const box = (await page.locator("#track").boundingBox())!;
+    expect(box.y + box.height / 2).toBeCloseTo(350, 0);
+  });
+});
