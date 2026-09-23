@@ -57,3 +57,5 @@ BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `
 - `!race show` / `!show` (settings.showCommand) pops that racer's name onto the mini map for 5 s even when `minimap.names` is off; emits the `show` event.
 - Colours: a racer keeps the colour they picked with the colour command; otherwise their Twitch chat colour is used (captured from any message, `Game.NoteTwitchColor`), so names are only white when Twitch says so.
 - Director: a brief overhead (`Cam.OverheadHold` 5 s) cycles in every `Cam.OverheadEvery` (35 s) so viewers can see the whole field; gated by the `overhead` shot switch on the Camera page.
+- Percent: `Game.FinishDistance` prefers the finish-line trigger, treats a trigger found near route distance 0 as a lap finish (= route length), and never reports 100 until the car has actually finished.
+- Horizontal bar spacing: `overlay.spreadMode` "field" (default; the leader paces the bar and the field is stretched out behind by their gap) or "track" (raw progress); `?spreadMode=`.

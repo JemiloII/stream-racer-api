@@ -42,12 +42,19 @@ static partial class Game
     /// would read 100% while the car is still driving. Falls back to finishAt when the trigger can't be found.
     public static float FinishDistance(Vehicle vehicle)
     {
-        float gameFinish = FinishAt(vehicle);
-        return FinishLine(out _, out _, out var lineDistance) && lineDistance > 1f ? Mathf.Max(lineDistance, gameFinish) : gameFinish;
+        float gameFinish = FinishAt(vehicle);                      // the game's own target: reached before the line
+        float routeLength = Instances.WaypointController?.GetCircuit()?.Length() ?? 0f;
+        bool haveLine = FinishLine(out _, out _, out var lineDistance);
+        // On a lap the finish trigger sits at the start of the route, so the nearest route point to it is ~0: the
+        // line is really crossed at the end of the lap, which is the route length.
+        if (haveLine && routeLength > 1f && lineDistance < routeLength * 0.15f) lineDistance = routeLength;
+        float finish = Mathf.Max(gameFinish, haveLine ? lineDistance : 0f);
+        return finish > 1f ? finish : Mathf.Max(routeLength, 1f);
     }
 
+    // Only a car that actually crossed the line reads 100: anything else stops at 99, however the distances work out.
     static float ProgressPercent(Vehicle vehicle) =>
-        vehicle.HasFinished() ? 100f : Mathf.Clamp(vehicle.Progress() / Mathf.Max(1f, FinishDistance(vehicle)) * 100f, 0f, 100f);
+        vehicle.HasFinished() ? 100f : Mathf.Clamp(vehicle.Progress() / Mathf.Max(1f, FinishDistance(vehicle)) * 100f, 0f, 99f);
 
     public static object Dto(Vehicle vehicle, int place)
     {

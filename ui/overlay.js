@@ -3,6 +3,7 @@
 // Look & feel comes from the plugin's settings (Settings → Overlay look) and updates live; query params override:
 // ?token=  &size=40  &names=0  &accent=%23ff8a00  &spread=34 (min px between cars, 0 = raw positions)
 // The bar is centred in its own window: size the OBS source to the bar itself, then place it. ?offsetY= nudges it.
+// ?spreadMode=field (leader paces the bar, the field spread out behind) or track (raw progress along the route).
 import { query } from "./lib/query.js";
 import { OVERLAY_DEFAULTS } from "./lib/defaults.js";
 import { escapeHtml, ordinal } from "./lib/text.js";
@@ -16,6 +17,7 @@ function applyLook(saved) {
   look = { ...saved };
   if (query.get("size")) look.size = +query.get("size");
   if (query.get("spread") != null) look.spread = +query.get("spread");
+  if (query.get("spreadMode")) look.spreadMode = query.get("spreadMode");
   if (query.get("offsetY") != null) look.offsetY = +query.get("offsetY");
   if (query.get("names") === "0") look.names = false;
   if (query.get("accent")) look.accent = query.get("accent");
@@ -58,15 +60,23 @@ function render() {
   const vehicles = feed.vehicles();
   const count = vehicles.length;
   const seen = new Set();
-  // Min gap by place: cars keep their order but never stack on top of each other (the field bunches at the finish).
-  // spread = px between neighbours, -1 = 85% of the avatar size, 0 = raw positions.
+  // Where each car sits on the bar.
+  //   "field" (default): the leader paces the bar. They sit at the front and everyone else is placed by how far
+  //     behind the leader they are, stretched across the whole width, so a tight pack is still readable.
+  //   "track": the raw progress along the track, which bunches everyone together late in a race.
+  // Either way a minimum gap keeps them from stacking: spread px between neighbours, -1 = 85% of the avatar size.
   const width = racersElement.clientWidth || trackElement.clientWidth || 0;
   const gap = (look.spread ?? -1) < 0 ? look.size * 0.85 : look.spread;
+  const byPlace = [...vehicles].sort((a, b) => a.place - b.place);
+  const shownPercent = (racer) => { const shown = shownProgress.get(racer.login); return racer.finished ? 100 : shown ? shown.current : racer.pct; };
+  const leaderPercent = byPlace.length ? shownPercent(byPlace[0]) : 0;
+  const lastPercent = byPlace.length ? shownPercent(byPlace[byPlace.length - 1]) : 0;
+  const behind = Math.max(0.5, leaderPercent - lastPercent);   // never divide by a dead heat
+  const fraction = (racer) => (look.spreadMode === "track" ? shownPercent(racer) / 100 : 1 - (leaderPercent - shownPercent(racer)) / behind);
   const leftByLogin = new Map();
   let previousLeft = Infinity;
-  for (const racer of [...vehicles].sort((a, b) => a.place - b.place)) {
-    const shown = shownProgress.get(racer.login);
-    const rawLeft = ((racer.finished ? 100 : (shown ? shown.current : racer.pct)) / 100) * width;
+  for (const racer of byPlace) {
+    const rawLeft = Math.max(0, Math.min(1, fraction(racer))) * width;
     const left = gap > 0 && width > 0 ? Math.max(0, Math.min(rawLeft, previousLeft - gap)) : rawLeft;
     leftByLogin.set(racer.login, left); previousLeft = left;
   }

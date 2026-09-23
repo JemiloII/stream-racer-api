@@ -176,3 +176,32 @@ test.describe("Name colours", () => {
     await expect(page.locator("#racers .racer .name").first()).toHaveCSS("color", "rgb(255, 255, 255)");
   });
 });
+
+test.describe("Leader-paced spacing", () => {
+  test.beforeEach(async ({ page }) => { await installFakeEvents(page); await mockJson(page, "/settings", { overlay: { size: 40 } }); });
+  const leftsByPlace = (page: Page) => page.locator("#racers .racer").evaluateAll((cars) => cars
+    .map((car) => ({ place: +(car.querySelector(".place")?.textContent || 0), left: parseFloat((car as HTMLElement).style.left) }))
+    .sort((a, b) => a.place - b.place).map((car) => car.left));
+
+  test("a tight pack still spans the bar instead of bunching at one point", async ({ page }) => {
+    const tight = racingSnapshot();
+    tight.vehicles[0]!.pct = 80; tight.vehicles[1]!.pct = 79; tight.vehicles[2]!.pct = 78;
+    await mockJson(page, "/race", tight);
+    await page.goto("/overlay");
+    await expect(page.locator("#racers .racer")).toHaveCount(3);
+    const lefts = await leftsByPlace(page);
+    expect(lefts[0]! - lefts[2]!).toBeGreaterThan(200); // spread right across the bar, not 2% of it
+    expect(lefts[0]!).toBeGreaterThan(lefts[1]!);
+    expect(lefts[1]!).toBeGreaterThan(lefts[2]!);
+  });
+
+  test("?spreadMode=track puts them back on their raw track progress", async ({ page }) => {
+    const tight = racingSnapshot();
+    tight.vehicles[0]!.pct = 80; tight.vehicles[1]!.pct = 79; tight.vehicles[2]!.pct = 78;
+    await mockJson(page, "/race", tight);
+    await page.goto("/overlay?spreadMode=track&spread=0");
+    await expect(page.locator("#racers .racer")).toHaveCount(3);
+    const lefts = await leftsByPlace(page);
+    expect(lefts[0]! - lefts[2]!).toBeLessThan(60); // ~2% of the width
+  });
+});
