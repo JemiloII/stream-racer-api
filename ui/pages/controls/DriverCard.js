@@ -11,6 +11,7 @@ export default function DriverCard() {
     <article>
       <header>Driver</header>
       <button class="hero" onClick=${() => api("/boost/me")}>Boost me</button>
+      <button class="secondary respawn-me" onClick=${() => api("/respawn/me")} title="the game's stuck-car reset for your own car (free, never counted)">Respawn me</button>
       <div class="hero-meta">
         <span>boosts left <b>${myCar ? myCar.boosts : "–"}</b></span>
         <span>hotkey <kbd>${hotkey}</kbd></span>

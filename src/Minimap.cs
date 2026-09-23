@@ -10,14 +10,14 @@ static class Minimap
 
     public class Cfg
     {
-        public bool enabled = true;
+        public bool enabled = true;      // the IN-GAME map only; the /minimap browser source always works
         public float x = 0.02f, y = 0.03f, w = 0.18f, h = 0f; // screen fractions from bottom-left; h = 0 -> follow the track's aspect
         public float marker = 3f;        // dot diameter as % of the map's height
-        public string bg = "#000000"; public float alpha = 0.55f;
+        public string bg = "#000000"; public float alpha = 0f;
         public string track = "#ffffff";
         public float pad = 1.15f;        // margin around the track bounds
         public bool leaderBig = true;
-        public bool names = true;        // labels next to the dots (nudged apart so they don't overlap)
+        public bool names = true;        // labels to the right of the dots; they never move (the view leaves room for them)
         public string aspect = "1:1";    // /minimap page: fills the window, keeps this ratio (16:9, 4:3, 1:1, 21:9, auto = track)
     }
     public static Cfg Current = new();
@@ -30,7 +30,7 @@ static class Minimap
     static Font _font;
     static Material _material;
     static Bounds _bounds;
-    static float _halfHeight;
+    static float _halfHeight, _centerOffsetX;
 
     public static void Configure(JObject config) { Current = config?.ToObject<Cfg>() ?? new Cfg(); Apply(); }
 
@@ -55,7 +55,11 @@ static class Minimap
         float trackAspect = Mathf.Max(0.1f, _bounds.size.x) / Mathf.Max(0.1f, _bounds.size.z);
         float height = Pure.MapHeight(Current.w, Screen.width, Screen.height, Pure.AspectRatio(Current.aspect, trackAspect)); // same ratio as the /minimap page
         float boxAspect = (Current.w * Screen.width) / Mathf.Max(1f, height * Screen.height);
-        _halfHeight = Mathf.Max(_bounds.extents.z, _bounds.extents.x / boxAspect) * Current.pad + 2f;
+        // room on the right for the names (they sit to the right of their dot and never move): about 12 characters
+        float baseHalf = Mathf.Max(_bounds.extents.z, _bounds.extents.x / boxAspect) * Current.pad + 2f;
+        float labelRoom = Current.names ? 12f * (baseHalf * 2f * Current.marker / 100f) * 0.62f : 0f;
+        _halfHeight = Mathf.Max(_bounds.extents.z * Current.pad, (_bounds.extents.x * Current.pad + labelRoom) / boxAspect) + 2f;
+        _centerOffsetX = labelRoom / 2f;
 
         if (_camera == null)
         {
@@ -70,7 +74,7 @@ static class Minimap
         }
         _camera.rect = new Rect(Current.x, Current.y, Current.w, height);
         _camera.orthographicSize = _halfHeight;
-        _camera.transform.position = new Vector3(_bounds.center.x, _bounds.max.y + 400f, _bounds.center.z);
+        _camera.transform.position = new Vector3(_bounds.center.x + _centerOffsetX, _bounds.max.y + 400f, _bounds.center.z);
         _camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
         // backdrop: a quad far below everything, sized to the viewport
@@ -144,38 +148,23 @@ static class Minimap
         Labels(alive, lift);
     }
 
-    // Names sit to the right of their dot (left if that would run off the map), pushed apart vertically so they never overlap.
+    // Names sit to the right of their dot and stay there: no flipping at the edge, no pushing apart. The view is sized
+    // with room on the right (Apply), so a label near the edge still fits.
     static void Labels(HashSet<Vehicle> alive, float lift)
     {
         if (!Current.names) { if (_labels.Count > 0) { foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject); _labels.Clear(); } return; }
         float size = _halfHeight * 2f * Current.marker / 100f;      // world units per dot
-        float lineHeight = size * 1.3f, charWidth = size * 0.62f, gap = size * 0.7f;
-        float viewWidth = _camera.orthographicSize * _camera.aspect, right = _bounds.center.x + viewWidth - size, left = _bounds.center.x - viewWidth + size;
-        float top = _bounds.center.z + _camera.orthographicSize - lineHeight * 0.6f, bottom = _bounds.center.z - _camera.orthographicSize + lineHeight * 0.6f;
-        var placed = new List<(float x0, float x1, float z)>();
-        foreach (var vehicle in alive.OrderByDescending(vehicle => vehicle.Car().transform.position.z))
+        float gap = size * 0.7f;
+        foreach (var vehicle in alive)
         {
             if (!_labels.TryGetValue(vehicle, out var label) || label == null) _labels[vehicle] = label = MakeLabel(vehicle);
             var position = vehicle.Car().transform.position;
-            string text = vehicle.Profile().DisplayName() ?? Game.Login(vehicle);
-            float width = text.Length * charWidth;
-            bool flip = position.x + gap + width > right;               // would run off the right edge -> put it on the left
-            float x0 = flip ? position.x - gap - width : position.x + gap, x1 = x0 + width;
-            float z = Mathf.Clamp(position.z, bottom, top);
-            bool moved = true; int guard = 0;
-            while (moved && guard++ < 20)
-            {
-                moved = false;
-                foreach (var other in placed)
-                    if (x0 < other.x1 && x1 > other.x0 && Mathf.Abs(z - other.z) < lineHeight) { z = other.z - lineHeight; moved = true; }
-            }
-            placed.Add((x0, x1, z));
-            label.text = text;
+            label.text = vehicle.Profile().DisplayName() ?? Game.Login(vehicle);
             label.color = vehicle.Profile().Color();
-            label.anchor = flip ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
-            label.alignment = flip ? TextAlignment.Right : TextAlignment.Left;
+            label.anchor = TextAnchor.MiddleLeft;
+            label.alignment = TextAlignment.Left;
             label.characterSize = size * 0.32f;
-            label.transform.position = new Vector3(flip ? position.x - gap : position.x + gap, lift + 2f, z);
+            label.transform.position = new Vector3(position.x + gap, lift + 2f, position.z);
         }
         foreach (var gone in _labels.Keys.Where(vehicle => !alive.Contains(vehicle)).ToList()) { if (_labels[gone] != null) Object.Destroy(_labels[gone].gameObject); _labels.Remove(gone); }
     }

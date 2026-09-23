@@ -18,6 +18,6 @@ describe('GET /inventory/:login', () => {
   test('settings carry the respawn limit (default 2)', async () => {
     const settings = await readSettings();
     expect(typeof settings.respawnLimit).toBe('number');
-    expect(settings.respawnLimit).toBeGreaterThanOrEqual(0);
+    expect(settings.respawnLimit).toBeGreaterThanOrEqual(-1);
   });
 });

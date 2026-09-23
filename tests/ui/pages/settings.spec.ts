@@ -26,7 +26,7 @@ test.describe("Settings page", () => {
 
   test("mini map switch and ratio reflect settings.minimap", async ({ page, server }) => {
     const minimap = card(page, /^Mini map$/);
-    await expect(minimap.getByRole("switch", { name: "Show mini map during races" })).toBeChecked({ checked: server.settings.minimap.enabled });
+    await expect(minimap.getByRole("switch", { name: /Show the mini map inside the game/ })).toBeChecked({ checked: server.settings.minimap.enabled });
     await expect(minimap.getByLabel("Ratio (in-game and browser)")).toHaveValue(server.settings.minimap.aspect);
     await expect(minimap.getByRole("switch", { name: /^Names next to dots/ })).toBeChecked({ checked: server.settings.minimap.names });
     await expect(minimap.getByRole("switch", { name: "Bigger dot for the leader" })).toBeChecked({ checked: server.settings.minimap.leaderBig });

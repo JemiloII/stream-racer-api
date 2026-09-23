@@ -6,7 +6,7 @@ import { NumberField, SelectField } from "./fields.js";
 import TwitchConnect from "./TwitchConnect.js";
 
 const TIERS = [["everyone", "everyone"], ["follower", "followers +"], ["subscriber", "subscribers +"], ["off", "off"]];
-const PERK_DEFAULTS = { colorCommand: "follower", coloredNames: "everyone", boostFollower: 0, boostSubscriber: 1, boostDeveloper: 1, boostHost: 0 };
+const PERK_DEFAULTS = { colorCommand: "follower", coloredNames: "everyone", boostFollower: 0, boostSubscriber: 0, boostDeveloper: 0, boostHost: 0 };
 
 export default function PerksCard() {
   const { settings, saveSettings } = useStore();

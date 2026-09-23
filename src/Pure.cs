@@ -75,8 +75,8 @@ public static class Pure
     }
 
     // ---- respawns ----
-    // limit 0 = unlimited (-1); otherwise what's left, never below 0
-    public static int RespawnsLeft(int limit, int used) => limit <= 0 ? -1 : Math.Max(0, limit - used);
+    // limit -1 = unlimited (reported as -1); 0 = chat respawns off; otherwise what's left, never below 0
+    public static int RespawnsLeft(int limit, int used) => limit < 0 ? -1 : Math.Max(0, limit - used);
 
     // ---- chat ----
     // "!race color red" with command "!race color" -> "red"; null when it isn't that command.

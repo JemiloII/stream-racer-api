@@ -33,7 +33,7 @@ export default function MinimapCard() {
       <header>Mini map</header>
       <p class="hint">In-game: drawn inside the game window (so it's on stream). Position and width are fractions of the screen from the bottom-left; height follows the track's shape unless you set it. Browser: links below.</p>
       <div class="ovgrid">
-        <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.enabled} onChange=${(event) => setMinimap("enabled", event.target.checked)} /><span>Show mini map during races</span></label>
+        <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.enabled} onChange=${(event) => setMinimap("enabled", event.target.checked)} /><span>Show the mini map inside the game (the /minimap browser source always works)</span></label>
         <${NumberField} values=${minimap} onChange=${setMinimap} name="x" label="Left (0-1)" />
         <${NumberField} values=${minimap} onChange=${setMinimap} name="y" label="Bottom (0-1)" />
         <${NumberField} values=${minimap} onChange=${setMinimap} name="w" label="Width (0-1)" />

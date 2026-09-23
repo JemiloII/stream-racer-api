@@ -23,7 +23,7 @@ static class Settings
     {
         public string colorCommand = "follower";   // who may use the chat color command
         public string coloredNames = "everyone";   // whose name shows in color on the leaderboard (others white)
-        public int boostFollower = 0, boostSubscriber = 1, boostDeveloper = 1, boostHost = 0; // extra boosts on join
+        public int boostFollower = 0, boostSubscriber = 0, boostDeveloper = 0, boostHost = 0; // extra boosts on join (all off: the game's creators asked mods not to hand out boosts)
     }
 
     public class Model
@@ -40,7 +40,7 @@ static class Settings
         public bool colorLeaderboard = true;   // in-game leaderboard names in each car's color
         public bool colorCommandEnabled = true; // viewers can set their own color from chat
         public bool respawnCommandEnabled = true; // viewers can respawn their own car from chat
-        public int respawnLimit = 2;               // chat respawns per racer per race (0 = unlimited)
+        public int respawnLimit = 0;               // chat respawns per racer per race: 0 = off (default), -1 = unlimited
         public string respawnCommand = "!race respawn|!respawn"; // aliases separated by | or , (Pure.CommandAliases)
         public string colorCommand = "!race color|!color";       // e.g. "!color #ff8800" or "!color red"
         public bool chatReplies = true; // confirm chat commands in Twitch chat through the game's own connection (Game.SayInChat)

@@ -187,6 +187,13 @@ static class Routes
 
             case "respawn":
                 if (target == null) { status = 400; return new { error = "need /respawn/:target" }; }
+                if (target == "me")
+                {
+                    var myCar = Game.StreamerVehicle();
+                    if (myCar == null) { status = 404; return new { error = "streamer not in race" }; }
+                    if (!Game.Respawn(myCar)) { status = 409; return new { error = "not driving" }; }
+                    return Ok(1);
+                }
                 return Targets(target, ref status, Game.Respawn);
 
             case "join":

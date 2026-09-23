@@ -11,6 +11,7 @@ test.describe("Controls page", () => {
   test("Driver card has the Boost me button, the boosts-left counter and the hotkey from the plugin config", async ({ page, server }) => {
     const driver = card(page, /^Driver$/);
     await expect(driver.getByRole("button", { name: "Boost me" })).toBeVisible();
+    await expect(driver.getByRole("button", { name: "Respawn me" })).toBeVisible();
     await expect(driver.getByText(/boosts left/)).toBeVisible();
     await expect(driver.locator("kbd")).toHaveText(server.settings.config.hotkeyBoost || "J");
   });

@@ -13,8 +13,13 @@ public class RespawnTests
     public void Counts_down_from_the_limit_and_stops_at_zero(int limit, int used, int expectedLeft) => Assert.Equal(expectedLeft, RespawnsLeft(limit, used));
 
     [Theory]
-    [InlineData(0, 0)]
-    [InlineData(0, 99)]
+    [InlineData(-1, 0)]
+    [InlineData(-1, 99)]
     [InlineData(-3, 1)]
-    public void A_limit_of_zero_means_unlimited(int limit, int used) => Assert.Equal(-1, RespawnsLeft(limit, used));
+    public void A_negative_limit_means_unlimited(int limit, int used) => Assert.Equal(-1, RespawnsLeft(limit, used));
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(0, 5)]
+    public void A_limit_of_zero_means_chat_respawns_are_off(int limit, int used) => Assert.Equal(0, RespawnsLeft(limit, used));
 }

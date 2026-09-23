@@ -25,3 +25,5 @@
 .btn-row { display: flex; gap: 8px; min-width: 0; }
 .btn-row + .btn-row { margin-top: 8px; }
 .btn-row button { flex: 1; margin: 0; }
+
+.respawn-me { width: 100%; margin: 8px 0 0; height: 34px; padding: 0; font-size: 12px; letter-spacing: .1em; }

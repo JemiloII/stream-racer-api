@@ -1,6 +1,6 @@
 // Browser-source mini map: the route outline + car dots, drawn on a canvas that fills the page.
 // Same look settings as the in-game map (Settings → Mini map), live via the settings event.
-// Query: ?token=  &names=1 (labels)  &leaderBig=1  &aspect=16:9  &track=%23fff  &bg=%23000  &alpha=0.55  &marker=3
+// Query: ?token=  &names=1 (labels)  &leaderBig=1  &aspect=16:9  &track=%23fff  &bg=%23000  &alpha=0  &marker=3
 import { query, tokenQuery } from "./lib/query.js";
 import { MINIMAP_DEFAULTS } from "./lib/defaults.js";
 
@@ -65,9 +65,11 @@ addEventListener("resize", fit);
 function projector() {
   if (!bounds) return null;
   const spanX = Math.max(1, bounds.maxX - bounds.minX) * look.pad, spanZ = Math.max(1, bounds.maxZ - bounds.minZ) * look.pad;
-  const scale = Math.min(boxWidth / spanX, boxHeight / spanZ);
+  // names sit to the right of their dot and never move: reserve room for ~12 characters on the right of the box
+  const labelRoomPx = look.names ? 12 * Math.max(9, Math.min(boxWidth, boxHeight) * look.marker / 100 * 0.9) * 0.55 : 0;
+  const scale = Math.min((boxWidth - labelRoomPx) / spanX, boxHeight / spanZ);
   const centerX = (bounds.minX + bounds.maxX) / 2, centerZ = (bounds.minZ + bounds.maxZ) / 2;
-  return (x, z) => [boxWidth / 2 + (x - centerX) * scale, boxHeight / 2 - (z - centerZ) * scale]; // z up on screen, like looking down with north up
+  return (x, z) => [(boxWidth - labelRoomPx) / 2 + (x - centerX) * scale, boxHeight / 2 - (z - centerZ) * scale]; // z up on screen, like looking down with north up
 }
 
 function hexToRgba(hex, alpha) {
@@ -104,27 +106,14 @@ function draw() {
   if (look.names) drawLabels(dots, dotSize);
 }
 
-// Names beside their dot (right, or left near the edge), pushed apart vertically until nothing overlaps.
+// Names to the right of their dot, and they stay there: no flipping, no pushing apart (the projector leaves room).
 function drawLabels(dots, dotSize) {
-  const fontSize = Math.max(9, dotSize * 0.9), lineHeight = fontSize * 1.15, gap = dotSize * 0.7;
-  context.font = `600 ${fontSize}px "Chakra Petch", sans-serif`; context.textBaseline = "middle";
-  const placed = [];
-  for (const dot of [...dots].sort((a, b) => a.py - b.py)) {
+  const fontSize = Math.max(9, dotSize * 0.9), gap = dotSize * 0.7;
+  context.font = `600 ${fontSize}px "Chakra Petch", sans-serif`; context.textBaseline = "middle"; context.textAlign = "left";
+  for (const dot of dots) {
     const text = dot.vehicle.displayName || dot.vehicle.login;
-    const textWidth = context.measureText(text).width + 4;
-    const flip = dot.px + gap + textWidth > boxWidth - 4;
-    const left = flip ? dot.px - gap - textWidth : dot.px + gap, right = left + textWidth;
-    let y = Math.min(Math.max(dot.py, fontSize * 0.6), boxHeight - fontSize * 0.6);
-    let moved = true, guard = 0;
-    while (moved && guard++ < 20) {
-      moved = false;
-      for (const other of placed) if (left < other.right && right > other.left && Math.abs(y - other.y) < lineHeight) { y = other.y + lineHeight; moved = true; }
-    }
-    placed.push({ left, right, y });
-    context.textAlign = flip ? "right" : "left";
-    const textX = flip ? dot.px - gap : dot.px + gap;
-    context.lineWidth = 3; context.strokeStyle = "rgba(0,0,0,.85)"; context.lineJoin = "round"; context.strokeText(text, textX, y);
-    context.fillStyle = dot.vehicle.color || "#fff"; context.fillText(text, textX, y);
+    context.lineWidth = 3; context.strokeStyle = "rgba(0,0,0,.85)"; context.lineJoin = "round"; context.strokeText(text, dot.px + gap, dot.py);
+    context.fillStyle = dot.vehicle.color || "#fff"; context.fillText(text, dot.px + gap, dot.py);
   }
   context.textBaseline = "alphabetic";
 }

@@ -39,7 +39,7 @@ test.describe("Mini map browser source", () => {
 
   for (const aspect of ["16:9", "9:16", "4:3"]) {
     test(`?aspect=${aspect} draws a box of that ratio`, async ({ page }) => {
-      await page.goto(`/minimap?aspect=${encodeURIComponent(aspect)}`);
+      await page.goto(`/minimap?aspect=${encodeURIComponent(aspect)}&alpha=0.6`); // the box is transparent by default; give it a colour so its ratio can be read off the pixels
       await expect.poll(() => drawnBoxRatio(page), { message: `box ratio for ${aspect}` }).toBeCloseTo(parseAspect(aspect), 1);
     });
   }
@@ -47,7 +47,7 @@ test.describe("Mini map browser source", () => {
   test("without ?aspect the box follows settings.minimap.aspect", async ({ page, server }) => {
     const configured = server.settings.minimap.aspect;
     test.skip(!/^\d+:\d+$/.test(configured), `aspect "${configured}" depends on the loaded track`);
-    await page.goto("/minimap");
+    await page.goto("/minimap?alpha=0.6"); // transparent by default: give the box a colour so the pixels show its ratio
     await expect.poll(() => drawnBoxRatio(page)).toBeCloseTo(parseAspect(configured), 1);
   });
 });
