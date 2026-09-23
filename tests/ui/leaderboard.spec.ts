@@ -20,7 +20,7 @@ test.describe("Leaderboard browser source (vertical top-N list)", () => {
     await expect(rows).toHaveCount(SAMPLE_LOGINS.length);
     await expect(rows.locator(".n")).toHaveText(["1", "2", "3"]);
     await expect(rows.locator(".nm")).toContainText(["Alpha", "Bravo", "Charlie"]);
-    await expect(rows.locator(".nm small")).toHaveText(["61%", "45%", "12%"]);
+    await expect(rows.locator(".pct")).toHaveText(["61%", "45%", "12%"]);
     await expect(page.locator("#track, #racers, #banner")).toHaveCount(0); // the bar is the other source
   });
 
@@ -64,7 +64,7 @@ test.describe("Leaderboard browser source (vertical top-N list)", () => {
 
     await emitEvent(page, "race_end", endedSnapshot());
     await expect(page.locator("body")).toHaveClass(/race-over/);
-    await expect(page.locator("#board .row .nm small")).toHaveText(["FIN", "FIN", "FIN"]); // final standings while fading
+    await expect(page.locator("#board .row .pct")).toHaveText(["FIN", "FIN", "FIN"]); // final standings while fading
     await expect(page.locator("body")).toHaveClass(/no-race/, { timeout: 3000 });
     await expect(page.locator("#board")).toBeEmpty();
 
@@ -101,5 +101,42 @@ test.describe("Leaderboard name colours", () => {
 
     await page.goto("/leaderboard?nameColors=0");
     await expect(page.locator(".row .nm").first()).toHaveCSS("color", "rgb(255, 255, 255)");
+  });
+});
+
+test.describe("Leaderboard avatars and progress", () => {
+  test.beforeEach(async ({ page }) => {
+    await installFakeEvents(page);
+    await mockJson(page, "/settings", { overlay: {} });
+  });
+
+  test("every row shows a picture and its own completion column", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/leaderboard");
+    const rows = page.locator(".row");
+    await expect(rows.first()).toBeVisible();
+    const count = await rows.count();
+    await expect(page.locator(".row .pic")).toHaveCount(count);
+    await expect(page.locator(".row .pct")).toHaveCount(count);
+    await expect(rows.first().locator(".pct")).toHaveText(/^\d+%$/);
+  });
+
+  test("a finished racer reads FIN instead of a percentage", async ({ page }) => {
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/leaderboard");
+    await expect(page.locator(".row").first()).toBeVisible();
+    const finished = racingSnapshot();
+    finished.vehicles[0]!.finished = true;
+    finished.vehicles[0]!.pct = 100;
+    await emitEvent(page, "positions", finished);
+    await expect(page.locator(".row .pct").first()).toHaveText("FIN");
+  });
+
+  test("a custom bot picture is served from /image/<login>", async ({ page }) => {
+    const withBot = racingSnapshot();
+    withBot.vehicles[0] = { ...withBot.vehicles[0]!, login: "ttschan", displayName: "TTS-chan", avatar: null, image: "C:/pictures/tts-chan.png" };
+    await mockJson(page, "/race", withBot);
+    await page.goto("/leaderboard");
+    await expect(page.locator(".row .pic").first()).toHaveAttribute("src", "/image/ttschan");
   });
 });

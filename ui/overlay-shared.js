@@ -12,8 +12,13 @@ import { escapeHtml, initialsOf } from "./lib/text.js";
 export const FADE_MS = 1000; // how long the cars take to fade after race_end
 
 // A racer's picture for innerHTML: the avatar, or initials in a colored box.
-export const avatarHtml = (racer, className = "") =>
-  racer.avatar ? `<img class="pic ${className}" src="${escapeHtml(racer.avatar)}" alt="">` : `<div class="pic init ${className}">${escapeHtml(initialsOf(racer))}</div>`;
+// Custom bots carry `image` (a local file the mod serves at /image/<login>); Twitch racers carry `avatar`.
+export const avatarUrlOf = (racer) => (racer.image ? `/image/${encodeURIComponent(racer.login)}` : racer.avatar || "");
+export const avatarHtml = (racer, className = "") => {
+  const url = avatarUrlOf(racer);
+  return url ? `<img class="pic ${className}" src="${escapeHtml(url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pic init ${className}',textContent:'${escapeHtml(initialsOf(racer))}'}))">`
+             : `<div class="pic init ${className}">${escapeHtml(initialsOf(racer))}</div>`;
+};
 
 const byPlace = (a, b) => a.place - b.place;
 

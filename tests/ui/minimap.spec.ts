@@ -39,6 +39,8 @@ const parseAspect = (aspect: string): number => { const [width = 1, height = 1] 
 
 test.describe("Mini map browser source", () => {
   test.use({ viewport: { width: 800, height: 800 } });
+  // the map only draws during a race, so give these a running one instead of whatever the live game is doing
+  test.beforeEach(async ({ page }) => { await installFakeEvents(page); await mockJson(page, "/race", racingSnapshot()); });
 
   test("loads with a canvas that fills the window", async ({ page }) => {
     await page.goto("/minimap");

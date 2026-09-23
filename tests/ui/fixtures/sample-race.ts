@@ -1,5 +1,5 @@
 // A small field the overlay specs feed through the fake event stream, shaped like GET /race and the snapshot events.
-export interface SampleVehicle { place: number; id: string; login: string; displayName: string; color: string; sub: boolean; pct: number; finished: boolean; boosts: number; avatar: string | null; x: number; z: number }
+export interface SampleVehicle { place: number; id: string; login: string; displayName: string; color: string; sub: boolean; pct: number; finished: boolean; boosts: number; avatar: string | null; image?: string | null; x: number; z: number }
 export interface SampleSnapshot { running: boolean; lobby: boolean; streamer: string; vehicles: SampleVehicle[] }
 
 const FIELD: SampleVehicle[] = [

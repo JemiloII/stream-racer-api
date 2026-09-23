@@ -30,7 +30,8 @@ function render() {
   const rows = look.board > 0 ? feed.vehicles().slice(0, look.board) : [];
   boardElement.innerHTML = rows.map((racer) => `
     <div class="row" style="--c:${escapeHtml(racer.color || "#fff")}"><span class="n">${racer.place}</span>${avatarHtml(racer)}
-      <span class="nm">${escapeHtml(racer.displayName)}<small>${racer.finished ? "FIN" : (racer.pct || 0).toFixed(0) + "%"}</small></span></div>`).join("");
+      <span class="nm">${escapeHtml(racer.displayName)}</span>
+      <span class="pct${racer.finished ? " done" : ""}">${racer.finished ? "FIN" : Math.round(racer.pct || 0) + "%"}</span></div>`).join("");
 }
 
 applyLook(look);
