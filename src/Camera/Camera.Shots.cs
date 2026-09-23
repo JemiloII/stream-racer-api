@@ -247,9 +247,9 @@ static partial class Cam
                 if (routeDirection.sqrMagnitude < 0.01f) routeDirection = Heading(rear);
                 _packDirection = _firstFrame || _packDirection.sqrMagnitude < 0.01f
                     ? routeDirection.normalized
-                    : Vector3.Slerp(_packDirection, routeDirection.normalized, 1f - Mathf.Exp(-Time.deltaTime * 1.5f));
+                    : Vector3.Slerp(_packDirection, routeDirection.normalized, 1f - Mathf.Exp(-SmoothDelta * 1.5f));
                 float rawSpread = Vector3.Distance(Anchor(rear).position, Anchor(front).position);
-                _packSpread = _firstFrame ? rawSpread : Mathf.Lerp(_packSpread, rawSpread, 1f - Mathf.Exp(-Time.deltaTime * 0.8f));
+                _packSpread = _firstFrame ? rawSpread : Mathf.Lerp(_packSpread, rawSpread, 1f - Mathf.Exp(-SmoothDelta * 0.8f));
                 float back = 26f + _packSpread * 0.7f, up = 9f + _packSpread * 0.3f;
                 wanted = centroid - _packDirection * back + Vector3.up * up;
                 lookAt = centroid + _packDirection * 6f + Vector3.up * 1f;
@@ -263,15 +263,15 @@ static partial class Cam
         float ease = Mode == CameraMode.Pack ? 1.4f : 2.5f;   // the pack shot drifts, it never darts
         if (eased && !_firstFrame)
         {
-            var next = Vector3.Lerp(_position, wanted, 1f - Mathf.Exp(-Time.deltaTime * ease));
-            float maxStep = 45f * Time.deltaTime;                        // never faster than a car
+            var next = Vector3.Lerp(_position, wanted, 1f - Mathf.Exp(-SmoothDelta * ease));
+            float maxStep = 45f * SmoothDelta;                        // never faster than a car
             _position = Vector3.Distance(next, _position) > maxStep ? _position + (next - _position).normalized * maxStep : next;
         }
         else _position = wanted;
         var look = Quaternion.LookRotation(lookAt - _position, Vector3.up);
         freeCam.transform.position = _position;
         float turn = Mode is CameraMode.Sweep or CameraMode.Finish or CameraMode.Grid ? 3f : Mode == CameraMode.Pack ? 4f : 10f; // parked cameras pan slowly, the pack shot turns gently
-        freeCam.transform.rotation = _firstFrame ? look : Quaternion.Slerp(freeCam.transform.rotation, look, 1f - Mathf.Exp(-Time.deltaTime * turn));
+        freeCam.transform.rotation = _firstFrame ? look : Quaternion.Slerp(freeCam.transform.rotation, look, 1f - Mathf.Exp(-SmoothDelta * turn));
         _firstFrame = false;
         // keep the game's free-cam angles in sync so taking over with the mouse doesn't snap
         var euler = freeCam.transform.rotation.eulerAngles;

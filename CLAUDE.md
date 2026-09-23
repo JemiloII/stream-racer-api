@@ -64,3 +64,5 @@ BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `
 - Pack shot: hangs off the group centroid with a route-direction and spread that are both eased, and pans/eases slower than the other shots (it used to anchor on the rear car's live heading, which jittered every frame).
 - Finish distance comes from walking the whole route and taking the LAST place it passes the finish trigger (a lap passes it twice; the first pass is the grid). The distance the first finisher covered is only a fallback.
 - Ranking puts finishers first in the order they crossed, then everyone else by ground covered. Finished cars stop moving, so ranking on distance alone let the next car overtake the winner.
+- Cars are set to Rigidbody interpolation at race start (Cam.KeepCarsSmooth). Physics steps slower than the frame rate, so an uninterpolated car shudders against a camera that moves every frame, and its name label with it.
+- All camera smoothing uses Cam.SmoothDelta (deltaTime capped at 50 ms) so one long frame cannot jolt the shot.

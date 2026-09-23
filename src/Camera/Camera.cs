@@ -48,7 +48,7 @@ static partial class Cam
     static Vector3 Heading(Vehicle vehicle)
     {
         var wanted = Flat(vehicle.Car().transform.forward * 0.5f + RouteDir(vehicle) * 0.5f, RouteDir(vehicle));
-        _heading = _firstFrame ? wanted : Vector3.Slerp(_heading, wanted, 1f - Mathf.Exp(-Time.deltaTime * 3f));
+        _heading = _firstFrame ? wanted : Vector3.Slerp(_heading, wanted, 1f - Mathf.Exp(-SmoothDelta * 3f));
         return _heading;
     }
 
@@ -166,6 +166,29 @@ static partial class Cam
         if (on) { _autoPausedUntil = 0; _directorCoroutine = Plugin.Instance.StartCoroutine(Director()); }
         Announce();
     }
+
+    // Cars are driven by physics, which steps at a fixed rate well under the frame rate. Without interpolation a car's
+    // transform only moves on a physics step, so against a camera that moves every frame the cars and their name labels
+    // shudder. Interpolation is purely visual: it changes nothing about how the cars drive.
+    public static IEnumerator KeepCarsSmooth()
+    {
+        while (Game.Running)
+        {
+            foreach (var vehicle in Game.Vehicles())
+            {
+                var car = vehicle?.Car();
+                if (car == null) continue;
+                var body = car.GetComponent<Rigidbody>() ?? car.GetComponentInChildren<Rigidbody>();
+                if (body != null && body.interpolation == RigidbodyInterpolation.None) body.interpolation = RigidbodyInterpolation.Interpolate;
+            }
+            yield return new WaitForSeconds(2f);   // cheap: catches cars that join or respawn mid-race
+        }
+    }
+
+    // How much time a smoothing step may use. A long frame (a hitch, a stream encoder spike) would otherwise let the
+    // camera lurch the whole way to its target in one go, which reads as a jolt rather than a move.
+    public const float MaxSmoothStep = 0.05f;
+    public static float SmoothDelta => Mathf.Min(Time.deltaTime, MaxSmoothStep);
 
     // The game positions the name labels in CarLabel.LateUpdate. If that ran before our camera move this frame,
     // labels lag one frame behind the cars and stutter. Re-place them after we move the camera.

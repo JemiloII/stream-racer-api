@@ -40,7 +40,7 @@ static class Patches
     static void OnStart()
     { Game.ForgetLearnedFinish(); Game.ForgetFinishOrder();
         Game.ResetBoomTracking(); Game.EnsureAvatars();
-        Plugin.Instance.StartCoroutine(Minimap.WhenRunning()); Plugin.Instance.StartCoroutine(Game.AutoBoostRace());
+        Plugin.Instance.StartCoroutine(Cam.KeepCarsSmooth()); Plugin.Instance.StartCoroutine(Minimap.WhenRunning()); Plugin.Instance.StartCoroutine(Game.AutoBoostRace());
         Plugin.Emit("race_start", Game.Snapshot()); Game.EmitBoostPools();
     }
 
