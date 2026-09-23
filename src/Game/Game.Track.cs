@@ -69,6 +69,8 @@ static partial class Game
             map = game?.MapId(), mapName = game?.MapName(),
             length = circuit?.Length() ?? 0f, finishAt = Vehicles().Select(FinishAt).DefaultIfEmpty(0f).Max(),
             finishLineAt = FinishLine(out _, out _, out var finishLineDistance) ? finishLineDistance : -1f,
+            raceDistance = RaceDistance,
+            roadFraction = Pure.RoadFraction(circuit?.Waypoints()?.Where(waypoint => waypoint != null).Select(waypoint => waypoint.position).ToList()),
             zones = BoostZones().Select(zone => new { start = zone[0], end = zone[1], length = zone[1] - zone[0] }).ToList(),
         };
     }
@@ -87,7 +89,11 @@ static partial class Game
     }
 
     // The real finish: the FinishLine trigger object. Position, the route direction through it, and its route distance.
+    public const float SampleEvery = 2f;   // how finely the road is mapped, in route units
     static Vector3 _finishPosition, _finishDirection; static float _finishDistance = -1f; static object _finishCircuit;
+    static float _raceDistance = -1f;
+    /// The distance from the grid to the finish line: 0% to 100%. -1 until the road has been mapped.
+    public static float RaceDistance => _raceDistance;
     public static bool FinishLine(out Vector3 position, out Vector3 direction, out float distance)
     {
         var circuit = Instances.WaypointController?.GetCircuit();
@@ -97,26 +103,29 @@ static partial class Game
             GameObject trigger = null;
             try { trigger = GameObject.FindGameObjectsWithTag("FinishLine").FirstOrDefault(); } catch { }
             if (trigger == null) { position = direction = Vector3.zero; distance = -1f; return false; }
-            // Walk the whole route and note every place it passes the finish line. On a point-to-point map there is
-            // one such place, near the end. On a lap the route passes it twice: once leaving the grid at distance 0 and
-            // again coming home, and the one we want is the LAST one. So: take the last pass, which is the full length
-            // of track the cars actually have to cover.
-            float bestError = float.MaxValue, bestDistance = 0f, lastPass = -1f;
-            float length = circuit.Length() > 0 ? circuit.Length() : 5000f;
-            const float step = 3f, nearLine = 25f, awayAgain = 60f;
-            bool onTheLine = false;
-            for (float along = 0; along < length; along += step)
+            // Map the road once, then read the answer off the map. The track never moves, so this is measured, not
+            // guessed: sample the route from the grid to where the road ends, then find the exact point where that
+            // line of road crosses the finish line. That distance is 100%.
+            var line = trigger.transform.position;
+            float loop = circuit.Length() > 0 ? circuit.Length() : 5000f;
+            var waypoints = circuit.Waypoints()?.Where(waypoint => waypoint != null).Select(waypoint => waypoint.position).ToList() ?? new List<Vector3>();
+            float road = Mathf.Min(loop, loop * Pure.RoadFraction(waypoints) + 40f);   // a little past the end so the line sits inside
+            var positions = new List<Vector3>((int)(road / SampleEvery) + 2); var along = new List<float>(positions.Capacity);
+            var throughLine = Vector3.forward; float nearestError = float.MaxValue, nearestAt = 0f;
+            for (float at = 0f; at <= road; at += SampleEvery)
             {
-                float error = Vector3.Distance(circuit.GetRoutePoint(along).Position(), trigger.transform.position);
-                if (error < bestError) { bestError = error; bestDistance = along; }
-                if (!onTheLine && error < nearLine) { onTheLine = true; lastPass = along; }
-                else if (onTheLine && error < nearLine && error < Vector3.Distance(circuit.GetRoutePoint(lastPass).Position(), trigger.transform.position)) lastPass = along;
-                else if (onTheLine && error > awayAgain) onTheLine = false;
+                var point = circuit.GetRoutePoint(at);
+                positions.Add(point.Position()); along.Add(at);
+                float error = Vector3.Distance(point.Position(), line);
+                if (error < nearestError) { nearestError = error; nearestAt = at; throughLine = point.Direction(); }
             }
-            // Ignore a pass that is still on the grid: that is the route leaving the line, not coming back to it.
-            if (lastPass > length * 0.25f) bestDistance = lastPass;
-            var routePoint = circuit.GetRoutePoint(bestDistance);
-            _finishPosition = trigger.transform.position; _finishDirection = routePoint.Direction(); _finishDirection.y = 0; _finishDirection.Normalize(); _finishDistance = bestDistance; _finishCircuit = circuit;
+            // A finish line is built square across the road, so the road's own direction where it meets the line is
+            // the line's normal: which side of it a point sits on.
+            float crossing = Pure.FinishCrossing(positions, along, line, throughLine);
+            var facing = throughLine; facing.y = 0f; facing.Normalize();
+            _finishPosition = line; _finishDirection = facing;
+            _finishDistance = crossing > 1f ? crossing : nearestAt;   // nothing crossed it: fall back on the closest the road comes
+            _finishCircuit = circuit; _raceDistance = _finishDistance;
         }
         position = _finishPosition; direction = _finishDirection; distance = _finishDistance; return true;
     }

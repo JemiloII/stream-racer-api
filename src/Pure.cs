@@ -38,6 +38,56 @@ public static class Pure
         return false;
     }
 
+    // ---- the track ----
+    // The game's route is a closed loop: the waypoint list ends with a hop straight back to the start so the AI can
+    // keep driving forever. On a point-to-point map that hop is a long jump across the map and is not road anyone
+    // races on, which is why the loop's length is not the racing distance. Road spacing is fairly even, so a tail
+    // segment many times the typical one is the hop. Returns how much of the loop is real road, 0..1.
+    public static float RoadFraction(IReadOnlyList<Vector3> waypoints)
+    {
+        if (waypoints == null || waypoints.Count < 7) return 1f;
+        var segments = new List<float>(waypoints.Count);
+        float total = 0f;
+        for (int i = 0; i + 1 < waypoints.Count; i++) { float length = Vector3.Distance(waypoints[i], waypoints[i + 1]); segments.Add(length); total += length; }
+        if (total <= 0f) return 1f;
+        var sorted = new List<float>(segments); sorted.Sort();
+        float median = sorted[sorted.Count / 2], limit = Math.Max(60f, median * 6f);
+        float road = 0f;
+        for (int i = 0; i < segments.Count; i++)
+        {
+            if (i >= (int)(segments.Count * 0.8f) && segments[i] > limit) break;   // the hop home lives at the tail
+            road += segments[i];
+        }
+        return Math.Min(1f, road / total);
+    }
+
+    /// Where the road crosses the finish line, as a distance along the route: positions[i] is the road at along[i].
+    /// A lap passes its line twice, leaving the grid and coming home, so the crossing that ends the race is the last
+    /// one. Only a crossing within halfWidth of the line's middle counts, so road that merely passes nearby is
+    /// ignored. Returns -1 when the road never crosses it.
+    public static float FinishCrossing(IReadOnlyList<Vector3> positions, IReadOnlyList<float> along, Vector3 line, Vector3 normal, float halfWidth = 45f)
+    {
+        if (positions == null || along == null || positions.Count < 2 || positions.Count != along.Count) return -1f;
+        normal.y = 0f;
+        if (normal.sqrMagnitude < 1e-4f) return -1f;
+        normal.Normalize();
+        float Side(int i) { var offset = positions[i] - line; offset.y = 0f; return Vector3.Dot(offset, normal); }
+        float found = -1f, previous = Side(0);
+        for (int i = 1; i < positions.Count; i++)
+        {
+            float current = Side(i);
+            if (previous < 0f && current >= 0f)                                    // crossed it going forwards
+            {
+                float fraction = current == previous ? 0f : -previous / (current - previous);
+                var at = Vector3.Lerp(positions[i - 1], positions[i], fraction);
+                var offset = at - line; offset.y = 0f;
+                if (offset.magnitude <= halfWidth) found = along[i - 1] + (along[i] - along[i - 1]) * fraction;
+            }
+            previous = current;
+        }
+        return found;
+    }
+
     // ---- versions ----
     // "1.2.10" vs "1.2.9" -> 1; missing parts count as 0; non-numeric parts count as 0.
     public static int CompareVersions(string left, string right)

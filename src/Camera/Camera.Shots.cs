@@ -152,6 +152,24 @@ static partial class Cam
         return true;
     }
 
+    // Framing shared by the group shots (pack, side, high). Taken raw these numbers shudder: the rear car swaps as
+    // places change, and any car's own heading twitches with every steering input. So the direction comes from the
+    // road rather than the car, and both it and the spread are eased over time. Reset at each cut by _firstFrame.
+    static Vector3 _groupDirection; static float _groupSpread;
+    static (Vector3 centroid, Vector3 direction, float spread) GroupFrame(List<Vehicle> pack)
+    {
+        var ordered = pack.OrderBy(vehicle => vehicle.Progress()).ToList();
+        var rear = ordered[0]; var front = ordered[ordered.Count - 1];
+        var routeDirection = RouteDir(rear); routeDirection.y = 0f;
+        if (routeDirection.sqrMagnitude < 0.01f) routeDirection = Heading(rear);
+        _groupDirection = _firstFrame || _groupDirection.sqrMagnitude < 0.01f
+            ? routeDirection.normalized
+            : Vector3.Slerp(_groupDirection, routeDirection.normalized, 1f - Mathf.Exp(-SmoothDelta * 1.5f));
+        float rawSpread = Vector3.Distance(Anchor(rear).position, Anchor(front).position);
+        _groupSpread = _firstFrame ? rawSpread : Mathf.Lerp(_groupSpread, rawSpread, 1f - Mathf.Exp(-SmoothDelta * 0.8f));
+        return (Centroid(pack), _groupDirection, _groupSpread);
+    }
+
     // Runs from a postfix on FreeCam.LateUpdate: places the camera for the active custom shot.
     public static void Tick(FreeCam freeCam)
     {
@@ -189,11 +207,7 @@ static partial class Cam
             {
                 var pack = Group();
                 if (pack.Count == 0) { Mode = CameraMode.None; return; }
-                var ordered = pack.OrderBy(vehicle => vehicle.Progress()).ToList();
-                var rear = ordered.First(); var front = ordered.Last();
-                var centroid = Centroid(pack);
-                var direction = Heading(rear);
-                float spread = Vector3.Distance(Anchor(rear).position, Anchor(front).position);
+                var (centroid, direction, spread) = GroupFrame(pack);
                 var sideVector = Vector3.Cross(Vector3.up, direction) * _sideSign;
                 if (Mode == CameraMode.Side)
                 {
@@ -237,22 +251,11 @@ static partial class Cam
             {
                 var pack = Group();
                 if (pack.Count == 0) { Mode = CameraMode.None; return; }
-                var ordered = pack.OrderBy(vehicle => vehicle.Progress()).ToList();
-                var rear = ordered.First(); var front = ordered.Last();
-                var centroid = Centroid(pack);
-                // Everything here is smoothed: the rear car swaps as places change and a car's own heading twitches
-                // with every steering input, both of which made this shot jitter. The route direction behind the
-                // pack is steady, the spread is eased, and the camera hangs off the centroid rather than one car.
-                var routeDirection = RouteDir(rear); routeDirection.y = 0f;
-                if (routeDirection.sqrMagnitude < 0.01f) routeDirection = Heading(rear);
-                _packDirection = _firstFrame || _packDirection.sqrMagnitude < 0.01f
-                    ? routeDirection.normalized
-                    : Vector3.Slerp(_packDirection, routeDirection.normalized, 1f - Mathf.Exp(-SmoothDelta * 1.5f));
-                float rawSpread = Vector3.Distance(Anchor(rear).position, Anchor(front).position);
-                _packSpread = _firstFrame ? rawSpread : Mathf.Lerp(_packSpread, rawSpread, 1f - Mathf.Exp(-SmoothDelta * 0.8f));
-                float back = 26f + _packSpread * 0.7f, up = 9f + _packSpread * 0.3f;
-                wanted = centroid - _packDirection * back + Vector3.up * up;
-                lookAt = centroid + _packDirection * 6f + Vector3.up * 1f;
+                // Hangs off the middle of the group, not off one car, so a place swap does not move the camera.
+                var (centroid, direction, spread) = GroupFrame(pack);
+                float back = 26f + spread * 0.7f, up = 9f + spread * 0.3f;
+                wanted = centroid - direction * back + Vector3.up * up;
+                lookAt = centroid + direction * 6f + Vector3.up * 1f;
                 Target = pack.Count + " cars"; _shotLogins = pack.Select(Game.Login).ToList();
                 break;
             }
@@ -260,7 +263,7 @@ static partial class Cam
         // Rigid on position (like the game's follow cam); only the look direction eases.
         // Pack is the exception: its anchor car can change, so ease position there to avoid a snap.
         bool eased = Mode is CameraMode.Pack or CameraMode.Side or CameraMode.High;
-        float ease = Mode == CameraMode.Pack ? 1.4f : 2.5f;   // the pack shot drifts, it never darts
+        float ease = Mode == CameraMode.Pack ? 1.4f : 2f;     // the group shots drift, they never dart
         if (eased && !_firstFrame)
         {
             var next = Vector3.Lerp(_position, wanted, 1f - Mathf.Exp(-SmoothDelta * ease));
@@ -270,7 +273,7 @@ static partial class Cam
         else _position = wanted;
         var look = Quaternion.LookRotation(lookAt - _position, Vector3.up);
         freeCam.transform.position = _position;
-        float turn = Mode is CameraMode.Sweep or CameraMode.Finish or CameraMode.Grid ? 3f : Mode == CameraMode.Pack ? 4f : 10f; // parked cameras pan slowly, the pack shot turns gently
+        float turn = Mode is CameraMode.Sweep or CameraMode.Finish or CameraMode.Grid ? 3f : eased ? 4.5f : 10f; // parked cameras pan slowly, group shots turn gently, car-mounted shots keep up
         freeCam.transform.rotation = _firstFrame ? look : Quaternion.Slerp(freeCam.transform.rotation, look, 1f - Mathf.Exp(-SmoothDelta * turn));
         _firstFrame = false;
         // keep the game's free-cam angles in sync so taking over with the mouse doesn't snap

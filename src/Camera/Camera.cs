@@ -26,7 +26,6 @@ static partial class Cam
     static float _shotStartedAt, _shotSeconds, _fovFrom, _fovTo;
     static bool _zoomTemp;                     // zoom in and back out over the shot (sin curve) instead of a one-way lerp
     static Vector3 _position, _overheadPosition, _heading;
-    static Vector3 _packDirection; static float _packSpread;   // smoothed inputs for the pack shot
     static bool _firstFrame;
     static List<Vehicle> _shotGroup = new();   // the cars a group shot was framed on; locked for the shot so the camera doesn't hunt
     static Vehicle _followCar;                 // the car of the wide follow shot
