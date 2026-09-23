@@ -77,6 +77,8 @@ import { api, withToken } from "./lib/api.js";
  * @property {object} [perks]
  * @property {Array<{event: string, url: string, method: string, header: string, body: string, enabled: boolean}>} [webhooks]
  * @property {boolean} [colorLeaderboard]
+ * @property {boolean} [leaderboardAvatars]
+ * @property {boolean} [leaderboardPercent]
  * @property {boolean} [colorCommandEnabled]
  * @property {string} [colorCommand]                  alias list, `!race color|!color`
  * @property {boolean} [respawnCommandEnabled]
@@ -98,7 +100,7 @@ const withUiDefaults = (settings) => ({ ...settings, ui: { ...DEFAULT_UI, ...set
 // What PUT /settings receives from the page. The server merges, so this is exactly the part of /settings the page owns.
 const SETTINGS_KEYS = [
   "autoJoinStreamer", "streamerColor", "autoJoin", "ui", "bots", "customBots", "overlay", "minimap", "camera",
-  "colorLeaderboard", "colorCommandEnabled", "colorCommand", "respawnCommandEnabled", "respawnLimit", "respawnCommand",
+  "colorLeaderboard", "leaderboardAvatars", "leaderboardPercent", "colorCommandEnabled", "colorCommand", "respawnCommandEnabled", "respawnLimit", "respawnCommand",
   "colors", "perks", "twitchToken", "twitchClientId", "botOptions", "webhooks",
 ];
 const pick = (object, keys) => Object.fromEntries(keys.map((key) => [key, object[key]]));

@@ -65,6 +65,7 @@ static partial class Game
             if (item == null || item.NameText() == null) continue;
             var vehicle = LeaderboardItemVehicle?.GetValue(item) as Vehicle;
             item.NameText().color = enabled && vehicle != null && MayShowColoredName(vehicle) ? vehicle.Profile().Color() : Color.white;
+            DecorateLeaderboardRow(item, vehicle);
         }
     }
 

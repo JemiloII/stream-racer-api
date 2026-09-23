@@ -17,6 +17,8 @@ export default function NamesAndColorsCard() {
         <input type="checkbox" role="switch" checked=${settings.colorLeaderboard !== false} onChange=${(event) => saveSettings({ colorLeaderboard: event.target.checked })} />
         <span>Color names on the in-game leaderboard with each car's color</span>
       </label>
+        <label class="switch-row"><input type="checkbox" role="switch" checked=${settings.leaderboardAvatars !== false} onChange=${(event) => saveSettings({ leaderboardAvatars: event.target.checked })} /><span>Racer pictures on the in-game leaderboard</span></label>
+        <label class="switch-row"><input type="checkbox" role="switch" checked=${settings.leaderboardPercent !== false} onChange=${(event) => saveSettings({ leaderboardPercent: event.target.checked })} /><span>Completion percent on the in-game leaderboard</span></label>
       <label class="switch-row">
         <input type="checkbox" role="switch" checked=${settings.colorCommandEnabled !== false} onChange=${(event) => saveSettings({ colorCommandEnabled: event.target.checked })} />
         <span>Viewers can set their color from chat</span>

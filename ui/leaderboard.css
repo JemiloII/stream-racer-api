@@ -10,7 +10,7 @@ body.no-race #board { display: none; }
 #board { position: absolute; top: var(--side); left: var(--side); display: grid; gap: 4px; transform: scale(var(--board-scale)); transform-origin: top left; }
 body.board-right #board { left: auto; right: var(--side); transform-origin: top right; }
 #board:empty { display: none; }
-.row { display: grid; grid-template-columns: 26px 28px 1fr auto; gap: 8px; align-items: center; padding: 4px 10px 4px 6px; background: rgba(0,0,0,.72); border-left: 3px solid var(--c, #fff); border-radius: 4px; font-size: 14px; font-weight: 600; min-width: 180px; text-shadow: 0 1px 2px #000; }
+.row { display: grid; grid-template-columns: 26px 28px 1fr auto; gap: 10px; column-gap: 10px; align-items: center; padding: 4px 10px 4px 6px; background: rgba(0,0,0,.72); border-left: 3px solid var(--c, #fff); border-radius: 4px; font-size: 14px; font-weight: 600; min-width: 180px; text-shadow: 0 1px 2px #000; }
 .row .n { color: rgba(255,255,255,.7); text-align: right; }
 .row:nth-child(1) .n { color: var(--hazard); }
 .row .pic { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: #333; }

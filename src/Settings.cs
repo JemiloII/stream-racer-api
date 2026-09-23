@@ -38,6 +38,8 @@ static class Settings
         public Dictionary<string, BotOpts> botOptions = new(); // per bot login: autoBoost (default true)
         public List<Webhook> webhooks = new();                  // fire an HTTP request when an event happens (race_end -> your bot)
         public bool colorLeaderboard = true;   // in-game leaderboard names in each car's color
+        public bool leaderboardAvatars = true; // picture on each in-game leaderboard row
+        public bool leaderboardPercent = true; // completion percent on each in-game leaderboard row
         public bool colorCommandEnabled = true; // viewers can set their own color from chat
         public bool respawnCommandEnabled = true; // viewers can respawn their own car from chat
         public int respawnLimit = 0;               // chat respawns per racer per race: 0 = off (default), -1 = unlimited
@@ -124,7 +126,7 @@ static class Settings
     public static object WithConfig() => new
     {
         Current.autoJoinStreamer, Current.streamerColor, Current.autoJoin, Current.customBots,
-        Current.colorLeaderboard, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.respawnLimit, Current.chatReplies, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
+        Current.colorLeaderboard, Current.leaderboardAvatars, Current.leaderboardPercent, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.respawnLimit, Current.chatReplies, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
         followerChecks = Game.FollowerChecks, followerChecksError = Game.FollowerCheckError, camera = Current.camera, Current.ui, Current.overlay, minimap = Minimap.State, bots = Bots,
         config = ConfigDto(),
     };
