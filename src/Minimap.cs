@@ -63,7 +63,7 @@ static class Minimap
         _halfHeight = Mathf.Max(_bounds.extents.z * Current.pad, (_bounds.extents.x * Current.pad + labelRoom) / boxAspect) + 2f;
         _centerOffsetX = labelRoom / 2f;
         // room at the top for the map title, so it never sits on the track
-        float titleRoom = Current.mapTitle ? (_halfHeight * 2f * Current.marker / 100f) * 1.5f : 0f;
+        float titleRoom = Current.mapTitle ? (_halfHeight * 2f * Current.marker / 100f) * 3.2f : 0f;   // two lines
         _halfHeight += titleRoom / 2f;
         _centerOffsetZ = -titleRoom / 2f;
 
@@ -196,15 +196,15 @@ static class Minimap
             titleObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             _mapTitle = titleObject.AddComponent<TextMesh>();
             _mapTitle.font = _font; _mapTitle.fontSize = 48; _mapTitle.fontStyle = FontStyle.Bold;
-            _mapTitle.anchor = TextAnchor.LowerCenter; _mapTitle.alignment = TextAlignment.Center;
+            _mapTitle.anchor = TextAnchor.UpperCenter; _mapTitle.alignment = TextAlignment.Center;   // hangs down from the top edge, so it can't clip off the view
             var renderer = titleObject.GetComponent<MeshRenderer>();
             renderer.material = _font.material; renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
         }
         float size = _halfHeight * 2f * Current.marker / 100f;
-        _mapTitle.text = string.IsNullOrEmpty(creator) ? name : name + "  ·  by " + creator;
-        _mapTitle.characterSize = size * 0.34f;
+        _mapTitle.text = string.IsNullOrEmpty(creator) ? name : name + System.Environment.NewLine + "by " + creator;   // stacked, not side by side
+        _mapTitle.characterSize = size * 0.52f;
         _mapTitle.color = Parse(Current.track, 1f, Color.white);
-        _mapTitle.transform.position = new Vector3(_bounds.center.x + _centerOffsetX, lift + 2f, _camera.transform.position.z + _halfHeight * 0.965f);
+        _mapTitle.transform.position = new Vector3(_bounds.center.x + _centerOffsetX, lift + 2f, _camera.transform.position.z + _halfHeight * 0.99f);
     }
 
     static TextMesh MakeLabel(Vehicle vehicle)

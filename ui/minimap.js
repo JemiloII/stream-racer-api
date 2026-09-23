@@ -54,7 +54,7 @@ function aspectRatio() {
   return match ? +match[1] / +match[2] : 16 / 9;
 }
 // Room kept above the box for the map name and its author.
-const titleHeight = () => (look.mapTitle === false ? 0 : Math.max(18, Math.min(34, innerHeight * 0.06)));
+const titleHeight = () => (look.mapTitle === false ? 0 : Math.max(34, Math.min(72, innerHeight * 0.13)));   // two lines: name, then the author
 
 function fit() {
   const dpr = devicePixelRatio || 1;
@@ -136,15 +136,16 @@ function draw() {
 function drawMapTitle() {
   const map = snapshot?.map; const title = titleHeight();
   if (look.mapTitle === false || !map?.name || !title) return;
-  const fontSize = Math.max(11, title * 0.62);
-  context.font = `700 ${fontSize}px "Chakra Petch", sans-serif`;
+  const nameSize = Math.max(15, title * 0.46), authorSize = nameSize * 0.72;
   context.textAlign = "center"; context.textBaseline = "alphabetic";
-  const author = map.creator ? `  ·  by ${map.creator}` : "";
-  const text = map.name + author;
-  context.lineWidth = 3; context.strokeStyle = "rgba(0,0,0,.85)"; context.lineJoin = "round";
-  context.strokeText(text, boxWidth / 2, -title * 0.28);
+  context.lineWidth = 4; context.strokeStyle = "rgba(0,0,0,.9)"; context.lineJoin = "round";
   context.fillStyle = look.track || "#fff";
-  context.fillText(text, boxWidth / 2, -title * 0.28);
+  const draw = (text, size, y) => {
+    context.font = `700 ${size}px "Chakra Petch", sans-serif`;
+    context.strokeText(text, boxWidth / 2, y); context.fillText(text, boxWidth / 2, y);
+  };
+  if (map.creator) { draw(map.name, nameSize, -title * 0.5); draw(`by ${map.creator}`, authorSize, -title * 0.12); }
+  else draw(map.name, nameSize, -title * 0.3);
   context.textAlign = "left";
 }
 
