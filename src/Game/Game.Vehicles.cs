@@ -27,7 +27,29 @@ static partial class Game
         Instances.VehicleManager == null ? new List<Vehicle>() : Instances.VehicleManager.GetVehicles();
 
     // Same ordering the in-game leaderboard uses: progress descending, finishers get bumped high.
-    public static List<Vehicle> Ranked() => Vehicles().OrderByDescending(vehicle => vehicle.Progress()).ToList();
+    // Who finished, in the order they crossed the line. A finished car stops covering ground, so ranking on distance
+    // alone let the next car still driving overtake it and be called the winner. Finishers keep their places.
+    static readonly List<string> _finishOrder = new();
+    public static IReadOnlyList<string> FinishOrder => _finishOrder;
+    public static void ForgetFinishOrder() => _finishOrder.Clear();
+    public static int NoteFinished(Vehicle finisher)
+    {
+        string login = Login(finisher);
+        if (login != null && !_finishOrder.Contains(login)) _finishOrder.Add(login);
+        return FinishPlace(finisher) is int place && place > 0 ? place : _finishOrder.Count;
+    }
+    static int FinishPlace(Vehicle vehicle)
+    {
+        string login = Login(vehicle);
+        int index = login == null ? -1 : _finishOrder.IndexOf(login);
+        return index < 0 ? 0 : index + 1;
+    }
+
+    public static List<Vehicle> Ranked() => Vehicles()
+        .OrderBy(vehicle => FinishPlace(vehicle) > 0 ? 0 : 1)                       // everyone who finished, first
+        .ThenBy(vehicle => FinishPlace(vehicle) > 0 ? FinishPlace(vehicle) : 0)     // in the order they crossed
+        .ThenByDescending(vehicle => vehicle.Progress())                            // then the rest by ground covered
+        .ToList();
 
     public static Vehicle Find(string idOrLogin) =>
         Vehicles().FirstOrDefault(vehicle => vehicle.Profile().TwitchId() == idOrLogin || vehicle.Profile().Login() == idOrLogin);
@@ -54,8 +76,10 @@ static partial class Game
 
     public static float FinishDistance(Vehicle vehicle)
     {
-        if (_learnedFinish > 1f) return _learnedFinish;
+        // The track itself is the answer: how far along the route the finish line sits. Only when the route can't be
+        // read do we fall back on what the first finisher actually covered.
         if (FinishLine(out _, out _, out var lineDistance) && lineDistance > 1f) return lineDistance;
+        if (_learnedFinish > 1f) return _learnedFinish;
         float routeLength = Instances.WaypointController?.GetCircuit()?.Length() ?? 0f;
         return routeLength > 1f ? routeLength : Mathf.Max(FinishAt(vehicle), 1f);
     }

@@ -97,13 +97,24 @@ static partial class Game
             GameObject trigger = null;
             try { trigger = GameObject.FindGameObjectsWithTag("FinishLine").FirstOrDefault(); } catch { }
             if (trigger == null) { position = direction = Vector3.zero; distance = -1f; return false; }
-            // nearest point along the route to the trigger -> that's the finish distance and heading
-            float bestError = float.MaxValue, bestDistance = 0f; float length = circuit.Length() > 0 ? circuit.Length() : 5000f;
-            for (float along = 0; along < length; along += 3f)
+            // Walk the whole route and note every place it passes the finish line. On a point-to-point map there is
+            // one such place, near the end. On a lap the route passes it twice: once leaving the grid at distance 0 and
+            // again coming home, and the one we want is the LAST one. So: take the last pass, which is the full length
+            // of track the cars actually have to cover.
+            float bestError = float.MaxValue, bestDistance = 0f, lastPass = -1f;
+            float length = circuit.Length() > 0 ? circuit.Length() : 5000f;
+            const float step = 3f, nearLine = 25f, awayAgain = 60f;
+            bool onTheLine = false;
+            for (float along = 0; along < length; along += step)
             {
                 float error = Vector3.Distance(circuit.GetRoutePoint(along).Position(), trigger.transform.position);
                 if (error < bestError) { bestError = error; bestDistance = along; }
+                if (!onTheLine && error < nearLine) { onTheLine = true; lastPass = along; }
+                else if (onTheLine && error < nearLine && error < Vector3.Distance(circuit.GetRoutePoint(lastPass).Position(), trigger.transform.position)) lastPass = along;
+                else if (onTheLine && error > awayAgain) onTheLine = false;
             }
+            // Ignore a pass that is still on the grid: that is the route leaving the line, not coming back to it.
+            if (lastPass > length * 0.25f) bestDistance = lastPass;
             var routePoint = circuit.GetRoutePoint(bestDistance);
             _finishPosition = trigger.transform.position; _finishDirection = routePoint.Direction(); _finishDirection.y = 0; _finishDirection.Normalize(); _finishDistance = bestDistance; _finishCircuit = circuit;
         }

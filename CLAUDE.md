@@ -62,3 +62,5 @@ BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `
 - Director shot ranking: behind-the-car views win (chase +4, wide follow +3, pack/high +1 on top of coverage) so racers can read the road ahead and time a boost.
 - Opening: the grid shot (`Cam.GridHold` 6 s) then a high overview (`Cam.HighHold` 10 s) run before every other director rule and re-take the free cam each pass, because the game aims its own camera at the grid when a race starts.
 - Pack shot: hangs off the group centroid with a route-direction and spread that are both eased, and pans/eases slower than the other shots (it used to anchor on the rear car's live heading, which jittered every frame).
+- Finish distance comes from walking the whole route and taking the LAST place it passes the finish trigger (a lap passes it twice; the first pass is the grid). The distance the first finisher covered is only a fallback.
+- Ranking puts finishers first in the order they crossed, then everyone else by ground covered. Finished cars stop moving, so ranking on distance alone let the next car overtake the winner.
