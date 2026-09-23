@@ -12,7 +12,9 @@ static partial class Cam
     static PropCam _lastProp;
     static bool _leaderDue;       // the last shot didn't have 1st place in it -> next one must
     static float _lastCutAt; static string _lastCutKey; static bool _wasRunning;
-    static Vehicle _lastLeader; static float _lastDuelAt = -100f, _runningSince;
+    static Vehicle _lastLeader; static float _lastDuelAt = -100f, _lastOverheadAt = -100f, _runningSince;
+    // Every so often, a short look straight down so viewers can see where the whole field is on the track.
+    public const float OverheadEvery = 35f, OverheadHold = 5f;
     static void NoteCut(string key) { _lastCutAt = Time.time; _lastCutKey = key; }
 
     public static void OnBoom(Vehicle vehicle)
@@ -100,7 +102,7 @@ static partial class Cam
             yield return new WaitForSeconds(0.5f);
             if (!Auto) yield break;
             if (!Game.Running) { _wasRunning = false; continue; }
-            if (!_wasRunning) { _wasRunning = true; _runningSince = Time.time; _lastLeader = null; }
+            if (!_wasRunning) { _wasRunning = true; _runningSince = Time.time; _lastLeader = null; _lastOverheadAt = Time.time; }
             if (ManualHold || Time.time < _autoPausedUntil) continue;
             var racing = Racing(); if (racing.Count == 0) continue;
 
@@ -157,15 +159,24 @@ static partial class Cam
                 if (Side(0, 60f, 60f)) { _shotGroup = topTwo; NoteCut("duel"); continue; }
             }
 
+            // a quick overhead every so often: the whole track at once, so nobody loses track of where they are
+            if (On("overhead") && Mode != CameraMode.Overhead && age > 8f && Time.time - _lastOverheadAt > OverheadEvery)
+            {
+                _lastOverheadAt = Time.time;
+                if (Overhead(0, 60f, 60f)) { NoteCut("overhead"); continue; }
+            }
+
             // hold while the shot still shows most of the field (or all but two), unless it's gone stale
             int seen = CurrentCoverage(out bool leaderIn);
             bool good = seen >= Mathf.Max(2, Mathf.CeilToInt(racing.Count * 0.6f)) || seen >= racing.Count - 2;
             if (good) lowSince = -1f; else if (lowSince < 0) lowSince = Time.time;
             bool stale = age > 45f, minHeld = age >= 8f;
             bool cut = minHeld && ((!good && Time.time - lowSince > 2f) || stale || (age > 25f && !leaderIn && _leaderDue));
+            if (_lastCutKey == "overhead") cut = age > OverheadHold;   // it is deliberately a brief shot
             if (Mode == CameraMode.Prop && age > 9f) cut = true; // fixed cams don't move: never sit on one for long
             if (_lastCutKey == "pileup" && age > 8f) cut = true;
             if (_lastCutKey == "duel" && age > 10f) cut = true;
+            if (_lastCutKey == "overhead" && age > OverheadHold) cut = true;   // a glance, not a stay
             if (!cut) continue;
 
             // pick the candidate that would show the most cars; prefer ones with the leader; never the same shot again

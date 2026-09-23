@@ -56,3 +56,4 @@ BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `
 - Mini map title: `minimap.mapTitle` (name, on) and `minimap.mapAuthor` (author line, off) with `mapTitleAlign`/`mapAuthorAlign` (left|center|right, icon picker on Settings). Both the in-game map and `/minimap` draw them; query params `?mapTitle=0&mapAuthor=1&mapTitleAlign=left`.
 - `!race show` / `!show` (settings.showCommand) pops that racer's name onto the mini map for 5 s even when `minimap.names` is off; emits the `show` event.
 - Colours: a racer keeps the colour they picked with the colour command; otherwise their Twitch chat colour is used (captured from any message, `Game.NoteTwitchColor`), so names are only white when Twitch says so.
+- Director: a brief overhead (`Cam.OverheadHold` 5 s) cycles in every `Cam.OverheadEvery` (35 s) so viewers can see the whole field; gated by the `overhead` shot switch on the Camera page.
