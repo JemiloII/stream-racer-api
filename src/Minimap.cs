@@ -18,6 +18,7 @@ static class Minimap
         public float pad = 1.15f;        // margin around the track bounds
         public bool leaderBig = true;
         public bool names = true;        // labels to the right of the dots; they never move (the view leaves room for them)
+        public bool mapTitle = true;     // the map's name and author above the map (in game and on the /minimap page)
         public string aspect = "1:1";    // /minimap page: fills the window, keeps this ratio (16:9, 4:3, 1:1, 21:9, auto = track)
     }
     public static Cfg Current = new();
@@ -27,16 +28,17 @@ static class Minimap
     static LineRenderer _line;
     static readonly Dictionary<Vehicle, Transform> _markers = new();
     static readonly Dictionary<Vehicle, TextMesh> _labels = new();
+    static TextMesh _mapTitle;   // "Gherkin Gauntlent · by UnclePickle89" above the map
     static Font _font;
     static Material _material;
     static Bounds _bounds;
-    static float _halfHeight, _centerOffsetX;
+    static float _halfHeight, _centerOffsetX, _centerOffsetZ;
 
     public static void Configure(JObject config) { Current = config?.ToObject<Cfg>() ?? new Cfg(); Apply(); }
 
     public static object State => new
     {
-        Current.enabled, Current.x, Current.y, Current.w, Current.h, Current.marker, Current.bg, Current.alpha, Current.track, Current.pad, Current.leaderBig, Current.names, Current.aspect,
+        Current.enabled, Current.x, Current.y, Current.w, Current.h, Current.marker, Current.bg, Current.alpha, Current.track, Current.pad, Current.leaderBig, Current.names, Current.mapTitle, Current.aspect,
         live = _camera != null,
     };
 
@@ -60,6 +62,10 @@ static class Minimap
         float labelRoom = Current.names ? 12f * (baseHalf * 2f * Current.marker / 100f) * 0.62f : 0f;
         _halfHeight = Mathf.Max(_bounds.extents.z * Current.pad, (_bounds.extents.x * Current.pad + labelRoom) / boxAspect) + 2f;
         _centerOffsetX = labelRoom / 2f;
+        // room at the top for the map title, so it never sits on the track
+        float titleRoom = Current.mapTitle ? (_halfHeight * 2f * Current.marker / 100f) * 1.5f : 0f;
+        _halfHeight += titleRoom / 2f;
+        _centerOffsetZ = -titleRoom / 2f;
 
         if (_camera == null)
         {
@@ -74,7 +80,7 @@ static class Minimap
         }
         _camera.rect = new Rect(Current.x, Current.y, Current.w, height);
         _camera.orthographicSize = _halfHeight;
-        _camera.transform.position = new Vector3(_bounds.center.x + _centerOffsetX, _bounds.max.y + 400f, _bounds.center.z);
+        _camera.transform.position = new Vector3(_bounds.center.x + _centerOffsetX, _bounds.max.y + 400f, _bounds.center.z - _centerOffsetZ);
         _camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
         // backdrop: a quad far below everything, sized to the viewport
@@ -120,6 +126,7 @@ static class Minimap
         _markers.Clear();
         foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject);
         _labels.Clear();
+        if (_mapTitle != null) { Object.Destroy(_mapTitle.gameObject); _mapTitle = null; }
         if (_line != null) { Object.Destroy(_line.gameObject); _line = null; }
         if (_backdrop != null) { Object.Destroy(_backdrop.gameObject); _backdrop = null; }
         if (_camera != null) { Object.Destroy(_camera.gameObject); _camera = null; }
@@ -134,6 +141,7 @@ static class Minimap
         var alive = new HashSet<Vehicle>();
         var leader = Cam.Leader();
         float lift = _bounds.max.y + 40f;
+        ShowMapTitle(lift);
         foreach (var vehicle in Game.Vehicles())
         {
             if (vehicle.Car() == null) continue;
@@ -167,6 +175,36 @@ static class Minimap
             label.transform.position = new Vector3(position.x + gap, lift + 2f, position.z);
         }
         foreach (var gone in _labels.Keys.Where(vehicle => !alive.Contains(vehicle)).ToList()) { if (_labels[gone] != null) Object.Destroy(_labels[gone].gameObject); _labels.Remove(gone); }
+    }
+
+    // The map's name and author, centred just above the map box (same idea as the browser page).
+    static void ShowMapTitle(float lift)
+    {
+        if (!Current.mapTitle)
+        {
+            if (_mapTitle != null) { Object.Destroy(_mapTitle.gameObject); _mapTitle = null; }
+            return;
+        }
+        var game = Instances.GameController?.CurrentGame();
+        string name = game?.MapName();
+        if (string.IsNullOrEmpty(name)) return;
+        string creator = Game.MapCreator(game.MapId());
+        if (_mapTitle == null)
+        {
+            _font ??= Resources.GetBuiltinResource<Font>("Arial.ttf") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var titleObject = new GameObject("SRMinimap.MapTitle") { layer = Layer };
+            titleObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            _mapTitle = titleObject.AddComponent<TextMesh>();
+            _mapTitle.font = _font; _mapTitle.fontSize = 48; _mapTitle.fontStyle = FontStyle.Bold;
+            _mapTitle.anchor = TextAnchor.LowerCenter; _mapTitle.alignment = TextAlignment.Center;
+            var renderer = titleObject.GetComponent<MeshRenderer>();
+            renderer.material = _font.material; renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
+        }
+        float size = _halfHeight * 2f * Current.marker / 100f;
+        _mapTitle.text = string.IsNullOrEmpty(creator) ? name : name + "  ·  by " + creator;
+        _mapTitle.characterSize = size * 0.34f;
+        _mapTitle.color = Parse(Current.track, 1f, Color.white);
+        _mapTitle.transform.position = new Vector3(_bounds.center.x + _centerOffsetX, lift + 2f, _camera.transform.position.z + _halfHeight * 0.965f);
     }
 
     static TextMesh MakeLabel(Vehicle vehicle)
