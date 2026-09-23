@@ -159,3 +159,20 @@ test.describe("Horizontal bar placement", () => {
     expect(box.y + box.height / 2).toBeCloseTo(350, 0);
   });
 });
+
+test.describe("Name colours", () => {
+  test.beforeEach(async ({ page }) => { await installFakeEvents(page); });
+
+  test("each name takes its racer's colour on the bar, and ?nameColors=0 turns that off", async ({ page }) => {
+    await mockJson(page, "/settings", { overlay: {} });
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/overlay");
+    const firstName = page.locator("#racers .racer .name").first();
+    await expect(firstName).toBeVisible();
+    const coloured = await firstName.evaluate((element) => getComputedStyle(element).color);
+    expect(coloured).not.toBe("rgb(255, 255, 255)");
+
+    await page.goto("/overlay?nameColors=0");
+    await expect(page.locator("#racers .racer .name").first()).toHaveCSS("color", "rgb(255, 255, 255)");
+  });
+});

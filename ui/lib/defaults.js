@@ -1,7 +1,7 @@
 // Defaults of the look settings that both the Settings page and the browser sources need, so the form and the
 // page it configures never disagree: settings.overlay (/overlay + /leaderboard) and settings.minimap (/minimap).
 export const OVERLAY_DEFAULTS = {
-  size: 40, names: true, spread: -1, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, offsetY: 0, side: 24, banner: true, showInLobby: false,
+  size: 40, names: true, spread: -1, accent: "#ffd400", line: "rgba(255,255,255,.35)", lineHeight: 6, offsetY: 0, side: 24, banner: true, nameColors: true, showInLobby: false,
   board: 10, boardSide: "left", boardScale: 1, // leaderboard: rows, anchor, size
 };
 

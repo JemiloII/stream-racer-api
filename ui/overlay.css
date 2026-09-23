@@ -25,7 +25,8 @@ body.no-banner #banner { display: none; }
 .racer.p1 .place { background: var(--hazard); color: #000; }
 .racer.p2 .place { background: #cfd6df; color: #000; }
 .racer.p3 .place { background: #c98a4b; color: #000; }
-.racer .name { margin-top: 3px; font-size: 12px; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+.racer .name { margin-top: 3px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--c, #fff); text-shadow: 0 1px 2px #000, 0 0 4px #000, 0 0 2px #000; }
+body.plain-names .racer .name { color: #fff; }
 .racer.finished { opacity: .75; }
 .racer.finished .pic { border-color: var(--live); }
 .racer.boom { animation: boom .9s ease-out; }

@@ -87,3 +87,19 @@ test.describe("Leaderboard browser source (vertical top-N list)", () => {
     expect(await response.text()).toContain('id="board"');
   });
 });
+
+test.describe("Leaderboard name colours", () => {
+  test.beforeEach(async ({ page }) => { await installFakeEvents(page); });
+
+  test("rows show the racer's colour, and ?nameColors=0 falls back to white", async ({ page }) => {
+    await mockJson(page, "/settings", { overlay: {} });
+    await mockJson(page, "/race", racingSnapshot());
+    await page.goto("/leaderboard");
+    const firstRow = page.locator(".row .nm").first();
+    await expect(firstRow).toBeVisible();
+    expect(await firstRow.evaluate((element) => getComputedStyle(element).color)).not.toBe("rgb(255, 255, 255)");
+
+    await page.goto("/leaderboard?nameColors=0");
+    await expect(page.locator(".row .nm").first()).toHaveCSS("color", "rgb(255, 255, 255)");
+  });
+});

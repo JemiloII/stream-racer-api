@@ -41,6 +41,7 @@ export default function OverlayCard() {
           <label>Track line color<input value=${overlay.line} onBlur=${(event) => event.target.value !== overlay.line && setOverlay("line", event.target.value)} /></label>
           <label class="switch-row"><input type="checkbox" role="switch" checked=${overlay.names} onChange=${(event) => setOverlay("names", event.target.checked)} /><span>Names under avatars</span></label>
           <label class="switch-row"><input type="checkbox" role="switch" checked=${overlay.banner} onChange=${(event) => setOverlay("banner", event.target.checked)} /><span>RIP / finish banner</span></label>
+          <label class="switch-row"><input type="checkbox" role="switch" checked=${overlay.nameColors !== false} onChange=${(event) => setOverlay("nameColors", event.target.checked)} /><span>Names in each racer's colour (bar and leaderboard)</span></label>
           <label class="switch-row"><input type="checkbox" role="switch" checked=${!!overlay.showInLobby} onChange=${(event) => setOverlay("showInLobby", event.target.checked)} /><span>Show the field in the lobby too (both sources; otherwise only while racing)</span></label>
         </div>
       </section>

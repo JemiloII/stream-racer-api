@@ -14,9 +14,11 @@ function applyLook(saved) {
   if (query.get("side")) look.boardSide = query.get("side");
   if (query.get("scale")) look.boardScale = +query.get("scale");
   if (query.get("accent")) look.accent = query.get("accent");
+  if (query.get("nameColors") != null) look.nameColors = query.get("nameColors") === "1";
   const rootStyle = document.documentElement.style;
   rootStyle.setProperty("--hazard", look.accent); rootStyle.setProperty("--side", look.side + "px"); rootStyle.setProperty("--board-scale", look.boardScale);
   document.body.classList.toggle("board-right", look.boardSide === "right");
+  document.body.classList.toggle("plain-names", look.nameColors === false);
   render();
 }
 

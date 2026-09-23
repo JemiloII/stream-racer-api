@@ -15,5 +15,6 @@ body.board-right #board { left: auto; right: var(--side); transform-origin: top 
 .row:nth-child(1) .n { color: var(--hazard); }
 .row .pic { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: #333; }
 .row .init { display: flex; align-items: center; justify-content: center; font-size: 12px; background: var(--c, #444); }
-.row .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c, #fff); text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+body.plain-names .row .nm { color: #fff; text-shadow: none; }
 .row .nm small { color: rgba(255,255,255,.55); margin-left: 6px; font-size: 11px; }

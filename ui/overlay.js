@@ -19,11 +19,13 @@ function applyLook(saved) {
   if (query.get("offsetY") != null) look.offsetY = +query.get("offsetY");
   if (query.get("names") === "0") look.names = false;
   if (query.get("accent")) look.accent = query.get("accent");
+  if (query.get("nameColors") != null) look.nameColors = query.get("nameColors") === "1";
   const rootStyle = document.documentElement.style;
   rootStyle.setProperty("--size", look.size + "px"); rootStyle.setProperty("--hazard", look.accent); rootStyle.setProperty("--line", look.line);
   rootStyle.setProperty("--line-h", look.lineHeight + "px"); rootStyle.setProperty("--nudge", (look.offsetY ?? 0) + "px"); rootStyle.setProperty("--side", look.side + "px");
   document.body.classList.toggle("no-banner", !look.banner);
   document.body.classList.toggle("no-names", !look.names);
+  document.body.classList.toggle("plain-names", look.nameColors === false);
   render();
 }
 
