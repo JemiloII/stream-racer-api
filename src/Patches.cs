@@ -38,7 +38,7 @@ static class Patches
 
     [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.StartCurrentGame))]
     static void OnStart()
-    {
+    { Game.ForgetLearnedFinish();
         Game.ResetBoomTracking(); Game.EnsureAvatars();
         Plugin.Instance.StartCoroutine(Minimap.WhenRunning()); Plugin.Instance.StartCoroutine(Game.AutoBoostRace());
         Plugin.Emit("race_start", Game.Snapshot()); Game.EmitBoostPools();
@@ -47,6 +47,7 @@ static class Patches
     [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.AddFinisherToCurrentGame))]
     static void OnFinisher([HarmonyArgument(GameNames.FinisherArg)] Vehicle finisher)
     {
+        Game.LearnFinishDistance(finisher);   // now we know exactly how far the line is: everyone else's percent follows it
         var ranked = Game.Ranked();
         Plugin.Emit("finisher", Game.Dto(finisher, ranked.IndexOf(finisher) + 1));
     }

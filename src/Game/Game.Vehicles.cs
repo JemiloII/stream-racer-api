@@ -40,16 +40,24 @@ static partial class Game
 
     /// How far along the route the finish line actually is: the game's own finishAt can sit short of the line, which
     /// would read 100% while the car is still driving. Falls back to finishAt when the trigger can't be found.
+    // The route distance a car has covered when it crosses the line. Best source first:
+    //   1. what the first finisher of this race actually covered (exact, once anybody has finished),
+    //   2. the finish-line trigger's distance along the route,
+    //   3. the route length, since the game's own target sits well short of the line and would read 100 early.
+    static float _learnedFinish = -1f;
+    public static void ForgetLearnedFinish() => _learnedFinish = -1f;
+    public static void LearnFinishDistance(Vehicle finisher)
+    {
+        float covered = finisher?.Progress() ?? 0f;
+        if (covered > 1f && (_learnedFinish < 1f || covered < _learnedFinish)) _learnedFinish = covered;
+    }
+
     public static float FinishDistance(Vehicle vehicle)
     {
-        float gameFinish = FinishAt(vehicle);                      // the game's own target: reached before the line
+        if (_learnedFinish > 1f) return _learnedFinish;
+        if (FinishLine(out _, out _, out var lineDistance) && lineDistance > 1f) return lineDistance;
         float routeLength = Instances.WaypointController?.GetCircuit()?.Length() ?? 0f;
-        bool haveLine = FinishLine(out _, out _, out var lineDistance);
-        // On a lap the finish trigger sits at the start of the route, so the nearest route point to it is ~0: the
-        // line is really crossed at the end of the lap, which is the route length.
-        if (haveLine && routeLength > 1f && lineDistance < routeLength * 0.15f) lineDistance = routeLength;
-        float finish = Mathf.Max(gameFinish, haveLine ? lineDistance : 0f);
-        return finish > 1f ? finish : Mathf.Max(routeLength, 1f);
+        return routeLength > 1f ? routeLength : Mathf.Max(FinishAt(vehicle), 1f);
     }
 
     // Only a car that actually crossed the line reads 100: anything else stops at 99, however the distances work out.
