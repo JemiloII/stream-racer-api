@@ -29,7 +29,8 @@
 .quick button:hover { color: #000; }
 .quick .b:hover { background: var(--boom); border-color: var(--boom); }
 .quick .z:hover, .quick .p:hover { background: var(--boost); border-color: var(--boost); }
-.quick .s:hover { background: var(--slow); border-color: var(--slow); }
+.quick .s:hover, .quick .sh:hover { background: var(--slow); border-color: var(--slow); }
+.quick .gr:hover { background: var(--boost); border-color: var(--boost); }
 .quick .r:hover { background: var(--live); border-color: var(--live); }
 .quick .k:hover { background: #eef0f2; }
 .quick .f:hover { background: var(--live); border-color: var(--live); }

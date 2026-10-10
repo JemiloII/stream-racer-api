@@ -1,4 +1,5 @@
-// Controls → Race: lobby and race flow (create lobby, countdown, start now, end, next map) and "Add all of chat".
+// Controls → Race: lobby and race flow (create lobby, countdown, start now, end, next map), "Add all of chat", and the
+// Ranked switch (settings.sendResults: whether results reach the game's servers / season leaderboard).
 import { html } from "../../lib/html.js";
 import { api } from "../../lib/api.js";
 import { toast } from "../../lib/toast.js";
@@ -8,6 +9,8 @@ const DEFAULT_CHAT_JOIN_URL = "http://127.0.0.1:8788/race/join-chat";
 
 export default function RaceCard() {
   const snapshot = useStore((state) => state.snapshot);
+  const { settings, saveSettings } = useStore();
+  const ranked = settings.sendResults !== false;
   const chatJoinUrl = useStore((state) => state.uiSettings().chatJoinUrl);
   // Twitch's chatters list needs a moderator token the game doesn't have, so the bot does it (voisona-bot: POST /race/join-chat).
   const joinChat = async () => {
@@ -20,6 +23,10 @@ export default function RaceCard() {
   return html`
     <article>
       <header>Race</header>
+      <label class="switch-row" title="Off: results stay on this PC; nobody gets season points from these races">
+        <input type="checkbox" role="switch" checked=${ranked} onChange=${(event) => saveSettings({ sendResults: event.target.checked })} />
+        <span>Ranked ${ranked ? "on" : "off"}</span>
+      </label>
       <div class="btn-row">
         <button class="secondary" onClick=${() => api("/lobby")}>Create lobby</button>
         <button onClick=${() => api("/race/start")} title="starts the lobby countdown, like the START button">Start countdown</button>

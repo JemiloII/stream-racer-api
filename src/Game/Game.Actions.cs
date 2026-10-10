@@ -33,6 +33,30 @@ static partial class Game
         return true;
     }
 
+    // Lightning (rain): a random racing car is boomed, credited to the storm ("RIP name · by storm").
+    public static Vehicle StrikeRandomCar(string by)
+    {
+        if (!Running)
+        {
+            return null;
+        }
+        var targets = Vehicles().Where(vehicle => vehicle.Car() != null && !vehicle.HasFinished() && Boomable(vehicle)).ToList();
+        if (targets.Count == 0)
+        {
+            return null;
+        }
+        var struck = targets[Random.Range(0, targets.Count)];
+        BoomedUntil[struck] = Time.unscaledTime + BoomBusySeconds;
+        struck.Explode(by);
+        // the game's feed line names only the car now (Oct 10 build ignores "by"): credit the storm on that line
+        var feed = GameObject.Find("InGameCanvas/EventNotifications/EventContainer/Content/List");
+        if (feed != null && feed.transform.childCount > 0)
+        {
+            SetFeedText(feed.transform.GetChild(feed.transform.childCount - 1), "Main/Content/Top/Text", struck.Profile().DisplayName() + " · by " + by);
+        }
+        return struck;
+    }
+
     public static void ResetBoomTracking() { BoomedUntil.Clear(); Slows.Clear(); _respawnsUsed.Clear(); }
 
     // ---- boost ----
@@ -63,17 +87,21 @@ static partial class Game
     }
 
     // A boost only makes sense with wheels on the road: not mid-boom, not airborne, not off in the grass.
-    public static bool ReadyToBoost(Vehicle vehicle)
+    public static bool ReadyToBoost(Vehicle vehicle) => BoostBlocker(vehicle) == null;
+
+    // Why a boost would be wasted right now (null = go): the API refuses with this instead of spending the boost.
+    public static string BoostBlocker(Vehicle vehicle)
     {
-        if (vehicle.Car() == null || vehicle.HasFinished()) return false;
-        if (IsBoomed(vehicle)) return false;
+        if (vehicle.Car() == null) return "no car";
+        if (vehicle.HasFinished()) return "finished";
+        if (IsBoomed(vehicle)) return "boomed";
         var carTransform = vehicle.Car().transform;
         var body = vehicle.Car().GetComponent<Rigidbody>();
-        if (body != null && Mathf.Abs(body.velocity.y) > 2.5f) return false;                                  // flying / falling
-        if (Vector3.Dot(carTransform.up, Vector3.up) < 0.7f) return false;                                     // tipped over
-        if (!Physics.Raycast(carTransform.position + Vector3.up * 0.5f, Vector3.down, 2.5f)) return false;    // nothing under the car
-        if (IsOffRoad(vehicle, carTransform)) return false;                                                    // off the road
-        return true;
+        if (body != null && Mathf.Abs(body.velocity.y) > 2.5f) return "in the air";                          // flying / falling
+        if (Vector3.Dot(carTransform.up, Vector3.up) < 0.7f) return "flipped";                                // tipped over
+        if (!Physics.Raycast(carTransform.position + Vector3.up * 0.5f, Vector3.down, 2.5f)) return "in the air";   // nothing under the car
+        if (IsOffRoad(vehicle, carTransform)) return "off the road";
+        return null;
     }
 
     // Bot racers are AI cars nobody is typing !boost for, so drive their boosts: first try 0-4 s after

@@ -72,7 +72,7 @@ Works as an OBS custom browser dock. Pages and the overlays reconnect on their o
 | route | |
 |---|---|
 | `GET /race` | `{running, streamer, vehicles:[{place,id,login,displayName,color,sub,type,progress,finishAt,pct,finished,boosts,image,avatar,title}]}` |
-| `GET /events` | SSE: `lobby`, `joined`, `race_start`, `positions` (TickHz full snapshot), `pos` (PosHz, light `{t, v:[[login,x,z,pct,place,finished]…]}`), `finisher`, `race_end` (snapshot); `boom`, `boost` (a pool spend, `boosts` = what is left), `respawn`, `developer`, `crash`, `recovered` (one vehicle; booms/boosts include chat-triggered ones; `crash` = flipped / off road / stuck for over 1 s, with a `pileup` count); `boosts` `{login, boosts, delta}` when a pool changes without a boost firing (add, perk, race start); `perk` `{login, extraBoosts, reasons, boosts, followerChecks}` per joined car; `color`, `denied`, `chat` (chat commands and replies); `camera`, `settings`, `screen` |
+| `GET /events` | SSE: `lobby`, `joined`, `race_start`, `positions` (TickHz full snapshot), `pos` (PosHz, light `{t, v:[[login,x,z,pct,place,finished]…]}`), `finisher`, `race_end` (snapshot); `boom`, `boost` (a pool spend, `boosts` = what is left), `respawn`, `developer`, `crash`, `recovered` (one vehicle; booms/boosts include chat-triggered ones; `crash` = flipped / off road / stuck for over 1 s, with a `pileup` count); `boosts` `{login, boosts, delta}` when a pool changes without a boost firing (add, perk, race start); `perk` `{login, extraBoosts, reasons, boosts, followerChecks}` per joined car; `color`, `denied`, `chat` (chat commands and replies); `drift` `{login, phase, seconds, turbo}`; `camera`, `settings`, `screen` |
 | `GET /overlay` | browser source, the horizontal bar: avatars along a track line stacked by place, RIP/boost effects. `?size=56&names=0&token=` |
 | `GET /leaderboard` | browser source, the vertical top-N list. `?rows=10&side=left&scale=1&token=` |
 | `GET /me` | `{id, login, inRace}` |
@@ -85,6 +85,9 @@ Works as an OBS custom browser dock. Pages and the overlays reconnect on their o
 | `POST /boost/:x\|all/add?n=1` | add to the `!boost` pool; a single target answers `{boosts}`; fires `boosts` |
 | `POST /speed/:x\|all?mult=0.5&seconds=5` | top-speed multiplier for a while |
 | `POST /respawn/:x\|all` | the game's stuck-car respawn |
+| `POST /drift/:x\|me\|all?free=1` | arm a drift for the next corner: slide + mini-turbo; one pool boost unless `free=1` (chat: `!race drift\|!drift`) |
+| `POST /surface/ice\|puddles\|mud\|snow?count=&length=` | lay road surfaces for this race (ice slides, puddles splash-slow, mud bogs, snow packs as cars pass); `POST /surface/clear`, `GET /surface`; fires `surface` |
+| `POST /weather/rain\|snow\|fog?seconds=` | weather until cleared / the race ends (rain lays puddles, snow lays snow + the odd icy corner); `POST /weather/clear`, `GET /weather`; fires `weather` |
 | `POST /join` | body `{id,login,displayName,color,sub,image}` or array. Lobby only. Non-Twitch names work (bots). `image` (URL or local path) replaces the avatar in the lobby/results lists. |
 | `POST /join/me?color=` | add the streamer's own car (= JOIN GAME button); color defaults to the saved "my car color"; lobby only |
 | `POST /color/:x?color=` | set a racer's color (hex or name), remembered for future joins and shown on the car, the lobby row and the leaderboard; viewers can use any alias in `settings.colorCommand` (default `!race color\|!color`), confirmed in chat when `settings.chatReplies` is on |

@@ -91,7 +91,6 @@ static partial class Game
     static bool TierAllows(string tier, Vehicle vehicle, string login) =>
         Pure.TierAllows(tier, IsFollower(login), vehicle != null && IsSub(vehicle), vehicle != null && IsDev(vehicle), vehicle != null && IsHost(vehicle));
     public static bool MayUseColorCommand(string login) => TierAllows(Settings.Current.perks.colorCommand, Find(login), login);
-    public static bool MayShowColoredName(Vehicle vehicle) => TierAllows(Settings.Current.perks.coloredNames, vehicle, Login(vehicle));
 
     // Extra boosts on join: follower + subscriber + developer + host, stacking (Pure.ExtraBoosts). Runs once the backend
     // title is in. Sub/dev/host are known at once; the follower part waits for the Helix lookup, then the whole grant applies.
@@ -102,7 +101,7 @@ static partial class Game
     // later (the bot's PUT /tier, a follower lookup finishing) tops the pool up instead of double-granting.
     public static void GrantPerks(Vehicle vehicle)
     {
-        if (vehicle == null) return;
+        if (vehicle == null || RankedMode) return;   // ranked: no extra boosts
         var perks = Settings.Current.perks;
         void Apply()
         {

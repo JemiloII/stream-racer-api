@@ -12,7 +12,10 @@ namespace StreamRacerApi;
 
 static partial class Game
 {
-    const string AvatarName = "SRApiAvatar", PercentName = "SRApiPercent", ColorBarName = "SRApiColorBar";
+    const string AvatarName = "SRApiAvatar", PercentName = "SRApiPercent";
+    // The game's in-row place number sits in a 54 px box (6..60) with the digits centred; narrowed to this so the
+    // picture can sit right next to the number instead of after an empty gap.
+    const float RankRight = 40f, AvatarGap = 6f;
     static readonly Dictionary<string, Sprite> _avatarSprites = new();   // login -> picture, loaded once per source
     static readonly HashSet<string> _avatarLoading = new();
     static readonly Dictionary<string, string> _avatarSource = new();    // login -> what we loaded, so a change reloads
@@ -37,16 +40,18 @@ static partial class Game
 
         var avatar = row.Find(AvatarName) as RectTransform;
         if (wantAvatar && avatar == null) avatar = MakeAvatar(row, (RectTransform)nameText.transform);
+        bool hasPicture = false;
         if (avatar != null)
         {
             avatar.gameObject.SetActive(wantAvatar && vehicle != null);
-            if (wantAvatar && vehicle != null) FeedAvatar(avatar.Find("Picture")?.GetComponent<Image>(), Login(vehicle));
+            var picture = avatar.Find("Picture")?.GetComponent<Image>();
+            if (wantAvatar && vehicle != null) FeedAvatar(picture, Login(vehicle));
+            hasPicture = avatar.gameObject.activeSelf && picture != null && picture.enabled;
         }
-
-        var colorBar = row.Find(ColorBarName) as RectTransform;
-        if (colorBar == null) colorBar = MakeColorBar(row);
-        colorBar.gameObject.SetActive(vehicle != null && Settings.Current.colorLeaderboard);
-        if (vehicle != null) colorBar.GetComponent<Image>().color = vehicle.Profile().Color();
+        // the name follows the picture, or the number when there is no picture (no empty slot in front of it)
+        var nameRect = (RectTransform)nameText.transform;
+        float nameStart = hasPicture ? avatar.anchoredPosition.x + avatar.sizeDelta.x + AvatarGap : RankRight + AvatarGap;
+        if (avatar != null && !Mathf.Approximately(nameRect.offsetMin.x, nameStart)) nameRect.offsetMin = new Vector2(nameStart, nameRect.offsetMin.y);
 
         var percent = row.Find(PercentName) as RectTransform;
         if (wantPercent && percent == null) percent = MakePercent(row, nameText);
@@ -72,7 +77,9 @@ static partial class Game
         rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
         rect.pivot = new Vector2(0f, 0.5f);
         rect.sizeDelta = new Vector2(size, size);
-        rect.anchoredPosition = new Vector2(-6f, 0f);   // hugging the place number, just right of the colour bar
+        var rank = row.Find("Rank") as RectTransform;
+        if (rank != null) rank.offsetMax = new Vector2(RankRight, rank.offsetMax.y);
+        rect.anchoredPosition = new Vector2(RankRight + 2f, 0f);   // right after the number, centred on the row
         var holderImage = holder.GetComponent<Image>();
         holderImage.sprite = DiscSprite(); holderImage.type = Image.Type.Simple; holderImage.raycastTarget = false;
         holder.AddComponent<Mask>().showMaskGraphic = false;   // the disc masks the picture into a circle
@@ -82,35 +89,7 @@ static partial class Game
         pictureRect.anchorMin = Vector2.zero; pictureRect.anchorMax = Vector2.one; pictureRect.offsetMin = pictureRect.offsetMax = Vector2.zero;
         var image = picture.GetComponent<Image>();
         image.preserveAspect = true; image.raycastTarget = false; image.enabled = false;
-        // the name starts after the picture (the offset is applied once; a second pass would keep pushing it)
-        nameText.offsetMin = new Vector2(Mathf.Max(nameText.offsetMin.x, size + 6f), nameText.offsetMin.y);   // and the name clear of the picture
         return rect;
-    }
-
-    // A thin bar down the far left of the whole row in the racer's colour, full height, like the browser leaderboard.
-    // The place numbers sit in their own column left of the row, so the bar is pushed out past them to the panel edge.
-    static RectTransform MakeColorBar(RectTransform row)
-    {
-        var bar = new GameObject(ColorBarName, typeof(RectTransform), typeof(Image));
-        var rect = (RectTransform)bar.transform;
-        rect.SetParent(row, false);
-        rect.anchorMin = new Vector2(0f, 0f); rect.anchorMax = new Vector2(0f, 1f);
-        rect.pivot = new Vector2(0f, 0.5f);
-        rect.sizeDelta = new Vector2(5f, 0f);   // full row height, no margin
-        rect.anchoredPosition = new Vector2(-NumberColumnWidth(row), 0f);
-        bar.GetComponent<Image>().raycastTarget = false;
-        return rect;
-    }
-
-    /// How far the place-number column reaches left of a row: its width plus the gap the layout puts between them.
-    static float NumberColumnWidth(RectTransform row)
-    {
-        var content = row.parent != null ? row.parent.parent : null;   // ListItems -> Content
-        var numbers = content != null ? content.Find("ListNums") as RectTransform : null;
-        if (numbers == null || numbers.childCount == 0) return 0f;
-        float width = ((RectTransform)numbers.GetChild(0)).rect.width;
-        var layout = content.GetComponent<UnityEngine.UI.HorizontalOrVerticalLayoutGroup>();
-        return width + (layout != null ? layout.spacing : 0f);
     }
 
     // The percent at the right, in the same font as the name.

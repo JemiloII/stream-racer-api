@@ -10,26 +10,23 @@ namespace StreamRacerApi;
 [HarmonyPatch]
 static class Patches
 {
-    // Free cam vertical movement: game hardcodes Q/E. Adds configurable keys on top.
-    static readonly AccessTools.FieldRef<FreeCam, bool> FreeCamFast = AccessTools.FieldRefAccess<FreeCam, bool>(GameNames.FreeCamFastFlag);
-    [HarmonyPrefix, HarmonyPatch(typeof(FreeCam), GameNames.FreeCamVerticalMove)]
-    static bool FreeCamVertical(FreeCam __instance)
+    // Free cam vertical movement: the game hardcodes Q/E inside LateUpdate (15/s, 60/s with Shift, y clamped 3..250).
+    // Adds the configurable keys on top, at the same speed, from the LateUpdate postfix.
+    static void FreeCamVertical(FreeCam freeCam)
     {
-        float step = FreeCamFast(__instance) ? 1f : 0.25f;
-        if (Input.GetKey(Plugin.CamUp.Value)) step = +step;
-        else if (Input.GetKey(Plugin.CamDown.Value)) step = -step;
-        else return true;
-        var position = __instance.transform.position;
-        position.y += step;
-        Traverse.Create(__instance).Method(GameNames.FreeCamSetPosition, position).GetValue();
-        return false;
+        float direction = Input.GetKey(Plugin.CamUp.Value) ? 1f : Input.GetKey(Plugin.CamDown.Value) ? -1f : 0f;
+        if (direction == 0f || !freeCam.IsActive()) return;
+        float speed = Input.GetKey(KeyCode.LeftShift) ? 60f : 15f;
+        var position = freeCam.transform.position;
+        position.y = Mathf.Clamp(position.y + direction * speed * Time.deltaTime, 3f, 250f);
+        freeCam.transform.position = position;
     }
 
     [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.NewGame))]
-    static void OnNewGame() { Game.Ended = false; Game.ForgetPerks(); Plugin.Instance.StartCoroutine(Settings.OnLobby()); Game.EnsureAvatars(); }
+    static void OnNewGame() { Weather.EndOfRace(); Game.Ended = false; Game.ForgetPerks(); Plugin.Instance.StartCoroutine(Settings.OnLobby()); Game.EnsureAvatars(); }
 
     // Every boom, whether from bits, the API, or anything else, goes through the vehicle's explode method.
-    [HarmonyPostfix, HarmonyPatch(typeof(Vehicle), GameNames.VehicleExplode)]
+    [HarmonyPostfix, HarmonyPatch(typeof(Vehicle), GameNames.VehicleExplode, typeof(string))]   // Explode() just calls Explode(null)
     static void OnBoom(Vehicle __instance) { Plugin.Emit("boom", Game.EventDto(__instance)); Cam.OnBoom(__instance); }
 
     // Pool boosts: chat !boost, the hotkey, /boost/me, bot auto-boost.
@@ -40,7 +37,7 @@ static class Patches
     static void OnStart()
     { Game.ForgetLearnedFinish(); Game.ForgetFinishOrder();
         Game.ResetBoomTracking(); Game.EnsureAvatars();
-        Plugin.Instance.StartCoroutine(Cam.KeepCarsSmooth()); Plugin.Instance.StartCoroutine(Minimap.WhenRunning()); Plugin.Instance.StartCoroutine(Game.AutoBoostRace());
+        Plugin.Instance.StartCoroutine(Cam.KeepCarsSmooth()); Plugin.Instance.StartCoroutine(Game.AutoBoostRace());
         Plugin.Emit("race_start", Game.Snapshot()); Game.EmitBoostPools();
     }
 
@@ -57,7 +54,25 @@ static class Patches
     [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.EndCurrentGame))]
     static void EndPostfix(bool __state)
     {
-        if (__state) { Game.Ended = true; Cam.OnRaceEnd(); Minimap.Destroy(); Plugin.Emit("race_end", Game.Snapshot()); }
+        Weather.EndOfRace();   // weather + laid surfaces end with the race
+        if (__state)
+        {
+            Game.Ended = true;
+            Game.StopDrifts();
+            Cam.OnRaceEnd();
+            Game.RecordRace();
+            Plugin.Emit("race_end", Game.Snapshot());
+        }
+    }
+
+    // settings.sendResults = false: the race result never leaves this PC. The game gets the answer it builds itself for
+    // local test maps (places, no points), so its post-race screen still runs; no season points are credited.
+    [HarmonyPrefix, HarmonyPatch(typeof(MapApi), GameNames.ResultUpload)]
+    static bool KeepResultsLocal(RaceResultCallback __2)   // (request, local, onReply, onError)
+    {
+        if (Settings.Current.sendResults) return true;
+        __2?.Invoke(Game.LocalRaceResult());
+        return false;
     }
 
     // Saved color before the game builds the lobby row and spawns the preview, so the car and its row match from the start.
@@ -76,11 +91,16 @@ static class Patches
         }
     }
 
-    [HarmonyPrefix, HarmonyPatch(typeof(FollowCam), nameof(FollowCam.Update))]
+    [HarmonyPrefix, HarmonyPatch(typeof(FollowCam), nameof(FollowCam.LateUpdate))]
     static void BeforeFollowCam() => Cam.PanFollow();
 
     [HarmonyPostfix, HarmonyPatch(typeof(FreeCam), nameof(FreeCam.LateUpdate))]
-    static void AfterFreeCam(FreeCam __instance) { Cam.Tick(__instance); Cam.RefreshLabels(); }
+    static void AfterFreeCam(FreeCam __instance)
+    {
+        FreeCamVertical(__instance);
+        Cam.Tick(__instance);
+        Cam.RefreshLabels();
+    }
 
     // Every chat message the game sees (the same handler that handles !race and bits): our chat commands.
     [HarmonyPostfix, HarmonyPatch(typeof(TwitchCommandListener), GameNames.ChatMessageReceived)]
@@ -99,6 +119,10 @@ static class Patches
     static readonly AccessTools.FieldRef<CarAIControl, CarController> AiCarController = AccessTools.FieldRefAccess<CarAIControl, CarController>(GameNames.AiCarController);
     [HarmonyPostfix, HarmonyPatch(typeof(CarAIControl), GameNames.AiSpeedUpdate)]
     static void AfterAiSpeed(CarAIControl __instance) => Game.ApplySlow(AiCarController(__instance));
+
+    // Road surfaces (mud, snow, puddles): their top-speed cut and drag, after the AI's own speed logic too.
+    [HarmonyPostfix, HarmonyPatch(typeof(CarAIControl), GameNames.AiSpeedUpdate)]
+    static void AfterAiSurface(CarAIControl __instance) => Game.ApplySurface(AiCarController(__instance));
 
     // Lobby / results list rows: after the game fills a row, swap in our image if one was registered.
     // The obfuscator emits several look-alike setup methods; patch every public one taking the racer profile type.

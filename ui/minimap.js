@@ -1,5 +1,6 @@
-// Browser-source mini map: the route outline + car dots, drawn on a canvas that fills the page.
-// Same look settings as the in-game map (Settings → Mini map), live via the settings event.
+// Browser-source mini map: the game's own road picture (or the route outline until the game has one) + car dots,
+// drawn on a canvas that fills the page. Dots use the game's projection, so they sit where the in-game map puts them.
+// Look settings: Settings → Mini map, live via the settings event.
 // Hidden outside a race: the map fades out on race_end and stays gone until the next lobby / race (?showInLobby=1
 // draws it during the lobby too).
 // Query: ?token=  &mapTitle=0  &mapAuthor=1  &mapTitleAlign=left|center|right  &mapAuthorAlign=…
@@ -15,6 +16,10 @@ let look = { ...MINIMAP_DEFAULTS };
 const canvas = document.getElementById("map");
 const context = canvas.getContext("2d");
 let snapshot = { vehicles: [] }, route = [], bounds = null;
+// The game's map: picture + projection (u = 0.5 + (x - cx) / ex, v = 0.5 + (z - cz) / ez, v up). Null = draw the route.
+let gameMap = null, gameMapImage = null;
+// "!show": names popped onto the map for a few seconds even when names are off. login -> until (ms)
+const revealedUntil = new Map();
 // Smooth movement: each car keeps a shown position that chases its latest reported one.
 const shownPositions = new Map(); // login -> {x, z, targetX, targetZ}
 const rememberPosition = (vehicle) => { if (vehicle.x != null && !shownPositions.has(vehicle.login)) shownPositions.set(vehicle.login, { x: vehicle.x, z: vehicle.z, targetX: vehicle.x, targetZ: vehicle.z }); };
@@ -52,6 +57,7 @@ function applyLook(saved) {
 // Width ÷ height of the map box: "16:9", "4x3", or "auto" = the track's own bounds.
 function aspectRatio() {
   const aspect = String(look.aspect || "16:9").trim().toLowerCase();
+  if (aspect === "auto" && gameMapImage) return 1;
   if (aspect === "auto" && bounds) return Math.max(0.2, (bounds.maxX - bounds.minX) / Math.max(1, bounds.maxZ - bounds.minZ));
   const match = /^(\d+(?:\.\d+)?)\s*[:x\/]\s*(\d+(?:\.\d+)?)$/.exec(aspect);
   return match ? +match[1] / +match[2] : 16 / 9;
@@ -73,12 +79,26 @@ function fit() {
 }
 addEventListener("resize", fit);
 
-// World (x, z) → box pixels, the track centred and scaled to fit with `pad` margin. Null until the track is known.
+// Names sit to the right of their dot and never move: room for ~12 characters on the right of the box.
+const labelRoom = () => (look.names ? 12 * Math.max(9, Math.min(boxWidth, boxHeight) * look.marker / 100 * 0.9) * 0.55 : 0);
+
+// The square the game's picture is drawn in: as big as fits next to the label room, centred.
+function pictureSquare() {
+  const side = Math.min(boxWidth - labelRoom(), boxHeight);
+  return { left: (boxWidth - labelRoom() - side) / 2, top: (boxHeight - side) / 2, side };
+}
+
+// World (x, z) → box pixels. With the game's picture: its projection. Without: the route centred and scaled to fit
+// with `pad` margin. Null until the track is known.
 function projector() {
+  if (gameMapImage) {
+    const { left, top, side } = pictureSquare();
+    return (x, z) => [left + (0.5 + (x - gameMap.cx) / gameMap.ex) * side, top + (0.5 - (z - gameMap.cz) / gameMap.ez) * side];
+  }
   if (!bounds) return null;
   const spanX = Math.max(1, bounds.maxX - bounds.minX) * look.pad, spanZ = Math.max(1, bounds.maxZ - bounds.minZ) * look.pad;
   // names sit to the right of their dot and never move: reserve room for ~12 characters on the right of the box
-  const labelRoomPx = look.names ? 12 * Math.max(9, Math.min(boxWidth, boxHeight) * look.marker / 100 * 0.9) * 0.55 : 0;
+  const labelRoomPx = labelRoom();
   const scale = Math.min((boxWidth - labelRoomPx) / spanX, boxHeight / spanZ);
   const centerX = (bounds.minX + bounds.maxX) / 2, centerZ = (bounds.minZ + bounds.maxZ) / 2;
   return (x, z) => [(boxWidth - labelRoomPx) / 2 + (x - centerX) * scale, boxHeight / 2 - (z - centerZ) * scale]; // z up on screen, like looking down with north up
@@ -114,12 +134,18 @@ function draw() {
   roundRect(0, 0, boxWidth, boxHeight, 10); context.fill();
   drawMapTitle();
   const toScreen = projector();
-  if (!toScreen || route.length < 2) return;
-  context.lineCap = "round"; context.lineJoin = "round";
-  context.strokeStyle = look.track; context.lineWidth = Math.max(2, boxHeight * 0.018);
-  context.beginPath();
-  route.forEach(([x, z], index) => { const [px, py] = toScreen(x, z); index ? context.lineTo(px, py) : context.moveTo(px, py); });
-  context.stroke();
+  if (!toScreen) return;
+  if (gameMapImage) {
+    const { left, top, side } = pictureSquare();
+    context.drawImage(gameMapImage, left, top, side, side);
+  } else {
+    if (route.length < 2) return;
+    context.lineCap = "round"; context.lineJoin = "round";
+    context.strokeStyle = look.track; context.lineWidth = Math.max(2, boxHeight * 0.018);
+    context.beginPath();
+    route.forEach(([x, z], index) => { const [px, py] = toScreen(x, z); index ? context.lineTo(px, py) : context.moveTo(px, py); });
+    context.stroke();
+  }
   const leader = snapshot.vehicles.find((vehicle) => !vehicle.finished) || snapshot.vehicles[0];
   const dotSize = boxHeight * look.marker / 100;
   const dots = [];
@@ -133,7 +159,9 @@ function draw() {
     context.lineWidth = Math.max(1, radius * 0.25); context.strokeStyle = "rgba(0,0,0,.7)"; context.stroke();
     dots.push({ vehicle, px, py, radius });
   }
-  if (look.names) drawLabels(dots, dotSize);
+  const now = Date.now();
+  const labelled = look.names ? dots : dots.filter((dot) => (revealedUntil.get(dot.vehicle.login) || 0) > now);
+  if (labelled.length) drawLabels(labelled, dotSize);
 }
 
 // "Locate Yourself · by MindZoneRL" above the box, in the accent colour.
@@ -176,7 +204,18 @@ function roundRect(x, y, width, height, radius) {
 }
 
 async function loadTrack() {
-  try { const track = await (await fetch("/track" + tokenQuery)).json(); route = track.points || []; bounds = track.bounds || null; } catch { route = []; bounds = null; }
+  try {
+    const track = await (await fetch("/track" + tokenQuery)).json();
+    route = track.points || []; bounds = track.bounds || null; gameMap = track.map || null;
+  } catch {
+    route = []; bounds = null; gameMap = null;
+  }
+  gameMapImage = null;
+  if (gameMap?.image) {
+    const image = new Image();
+    image.onload = () => { gameMapImage = image; fit(); };
+    image.src = gameMap.image + (tokenQuery ? "&" + tokenQuery.slice(1) : "");
+  }
   fit();
 }
 const fetchRace = () => fetch("/race" + tokenQuery).then((response) => response.json()).then((race) => { snapshot = race; if (phase !== "ended") setPhase(phaseOf(race)); }).catch(() => {});
@@ -202,6 +241,10 @@ function connect() {
   eventSource.addEventListener("lobby", loadTrack);
   eventSource.addEventListener("joined", () => fetch("/race" + tokenQuery).then((response) => response.json()).then((race) => { snapshot = race; }));
   eventSource.addEventListener("settings", (event) => applyLook(JSON.parse(event.data).minimap));
+  eventSource.addEventListener("show", (event) => {
+    const shown = JSON.parse(event.data);
+    revealedUntil.set(shown.login, Date.now() + (shown.seconds || 5) * 1000);
+  });
   eventSource.onopen = resync;
   eventSource.onerror = () => { eventSource.close(); retryTimer = setTimeout(connect, 3000); };
 }

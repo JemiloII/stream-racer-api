@@ -16,6 +16,7 @@ static class Routes
     // POST /boost/:x|all/add?n=1              add to the !boost pool
     // POST /speed/:x|all?mult=0.5&seconds=5   top-speed multiplier
     // POST /respawn/:x|all
+    // POST /drift/:x|me|all?free=1           arm a drift for the next corner (one pool boost unless free)
     // POST /join   {id,login,displayName,color,sub} or [..]
     // POST /kick/:x
     // POST /race/end   POST /race/next   GET /race
@@ -35,6 +36,8 @@ static class Routes
         if (method == "GET" && root == "camera") return target == "pose" ? Cam.Pose() : Cam.State;
         if (method == "GET" && root == "screen") return Game.ScreenState();
         if (method == "GET" && root == "track") return target == "zones" ? Game.ZonesDto() : Game.TrackDto(query["raw"] == "1");
+        if (method == "GET" && root == "surface") return Game.SurfacesDto();
+        if (method == "GET" && root == "weather") return Weather.Dto();
         if (method == "GET" && root == "motion") return Cam.MotionDto();   // physics rate vs frame rate: why a shot might look rough
         if (method == "GET" && root == "find") // dev aid: GameObjects whose name contains q, with path + components + text
         {
@@ -125,8 +128,19 @@ static class Routes
             if (restart) host.StartCoroutine(Plugin.Instance.RestartHttp());
             return result;
         }
-        if (method == "PUT" && root == "settings") { Settings.Save(body); Plugin.Emit("settings", Settings.WithConfig()); return Settings.WithConfig(); }
+        if (method == "PUT" && root == "settings")
+        {
+            Settings.Save(body);
+            if (Game.RankedMode) Game.EnterRanked();
+            Plugin.Emit("settings", Settings.WithConfig());
+            return Settings.WithConfig();
+        }
         if (method != "POST") { status = 404; return new { error = "not found" }; }
+        if (Game.RankedMode && Pure.RankedBlocks(root, target, action))
+        {
+            status = 403;
+            return new { error = "ranked race: the mod's extras are off (turn Ranked off to use them)", ranked = true };
+        }
 
         switch (root)
         {
@@ -154,6 +168,8 @@ static class Routes
                 {
                     var me = Game.StreamerVehicle();
                     if (me == null) { status = 404; return new { error = "streamer not in race" }; }
+                    string blocked = Game.Running ? Game.BoostBlocker(me) : "no race running";
+                    if (blocked != null) { status = 409; return new { error = blocked, boosts = Game.Boosts(me) }; }   // kept, not wasted
                     if (!Game.UseBoost(me)) { status = 409; return new { error = "no boosts left or not driving" }; }
                     return Ok(1);
                 }
@@ -161,6 +177,8 @@ static class Routes
                 {
                     var vehicle = Game.Find(target);
                     if (vehicle == null) { status = 404; return new { error = "no vehicle", target }; }
+                    string blocked = Game.Running ? Game.BoostBlocker(vehicle) : "no race running";
+                    if (blocked != null) { status = 409; return new { error = blocked, boosts = Game.Boosts(vehicle) }; }   // kept, not wasted
                     if (!Game.UseBoost(vehicle)) { status = 409; return new { error = "no boosts left or not driving", boosts = Game.Boosts(vehicle) }; }
                     return new { ok = true, affected = 1, boosts = Game.Boosts(vehicle) };
                 }
@@ -176,6 +194,21 @@ static class Routes
                 float? force = float.TryParse(query["force"], out var parsedForce) ? parsedForce : null;
                 float? seconds = float.TryParse(query["seconds"], out var parsedSeconds) ? parsedSeconds : null;
                 return Targets(target, ref status, vehicle => Game.Boost(vehicle, force, seconds));
+            }
+
+            case "shrink":
+            case "grow":
+            {
+                bool grow = root == "grow";
+                target ??= grow ? "3" : "10";   // no target = random cars: 10 like the game's shrink ray, 3 giants
+                float scale = float.TryParse(query["scale"], out var parsedScale) ? parsedScale : grow ? Game.GrowScale : Game.ShrinkScale;
+                scale = grow ? Mathf.Clamp(scale, 1.05f, 3f) : Mathf.Clamp(scale, 0.1f, 0.95f);
+                float seconds = Mathf.Clamp(float.TryParse(query["seconds"], out var parsedSeconds) ? parsedSeconds : Game.ResizeSeconds, 1f, 60f);
+                if (!Game.Running) { status = 409; return new { error = "no race running" }; }
+                var resized = Game.ResizeTargets(target, scale, seconds, query["except"]);
+                if (resized.Count == 0) { status = 404; return new { error = "no car to " + root, target }; }
+                Game.AnnounceResize(grow, resized, query["by"]);
+                return new { ok = true, affected = resized.Count, scale, seconds };
             }
 
             case "speed":
@@ -232,6 +265,50 @@ static class Routes
                 if (!Game.SayInChat(text)) { status = 409; return new { error = "chat not connected (game not logged in to Twitch)", chat = Game.ChatStatus() }; }
                 return new { ok = true, affected = 1, channel = Game.ChatChannel, text };
             }
+
+            case "effect":
+            {
+                string refusal = Game.StartEffect(target, string.IsNullOrWhiteSpace(query["by"]) ? null : query["by"]);
+                if (refusal != null)
+                {
+                    status = refusal.StartsWith("unknown") ? 404 : 409;
+                    return new { error = refusal, effects = Game.EffectNames };
+                }
+                return new { ok = true, effect = target.ToLowerInvariant() };
+            }
+
+            case "drift":
+            {
+                if (target == null)
+                {
+                    status = 400;
+                    return new { error = "need /drift/:target" };
+                }
+                bool free = query["free"] == "1" || query["free"] == "true";
+                if (target == "all")
+                {
+                    return Ok(Game.Vehicles().Count(vehicle => Game.ArmDrift(vehicle, free) == null));
+                }
+                var driver = target == "me" ? Game.StreamerVehicle() : Game.Find(target);
+                if (driver == null)
+                {
+                    status = 404;
+                    return new { error = "no vehicle", target };
+                }
+                string refusal = Game.ArmDrift(driver, free);
+                if (refusal != null)
+                {
+                    status = 409;
+                    return new { error = refusal, boosts = Game.Boosts(driver) };
+                }
+                return new { ok = true, affected = 1, boosts = Game.Boosts(driver) };
+            }
+
+            case "surface":
+                return Game.SurfaceRequest(target, query, ref status);
+
+            case "weather":
+                return Weather.Request(target, query, ref status);
 
             case "finish":
                 if (target == null) { status = 400; return new { error = "need /finish/:target" }; }

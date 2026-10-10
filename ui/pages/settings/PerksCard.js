@@ -20,7 +20,7 @@ export default function PerksCard() {
       <p class="hint">Who gets what. Subscriber and developer come from the game; host is you; <b>follower needs the Twitch login below</b> (the game's own token can't check follows). Extra boosts stack: a subscribed follower gets both.</p>
       <div class="ovgrid">
         <${SelectField} values=${perks} onChange=${setPerk} options=${TIERS} name="colorCommand" label="Chat color command" />
-        <${SelectField} values=${perks} onChange=${setPerk} options=${TIERS} name="coloredNames" label="Colored name on the leaderboard" />
+        <${SelectField} values=${perks} onChange=${setPerk} options=${TIERS} name="coloredNames" label="Colored name in the lobby list" />
         <${NumberField} values=${perks} onChange=${setPerk} name="boostFollower" step="1" label="Extra boosts: follower" />
         <${NumberField} values=${perks} onChange=${setPerk} name="boostSubscriber" step="1" label="Extra boosts: subscriber" />
         <${NumberField} values=${perks} onChange=${setPerk} name="boostDeveloper" step="1" label="Extra boosts: developer" />

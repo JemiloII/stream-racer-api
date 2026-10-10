@@ -16,7 +16,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.43.9"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.44.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
@@ -90,7 +90,7 @@ public class Plugin : BaseUnityPlugin
 
     public static string BaseUrl => $"http://127.0.0.1:{Port.Value}/";
 
-    void LateUpdate() { Minimap.Tick(); try { Game.ColorLeaderboard(); Game.TrackStates(); } catch { } }
+    void LateUpdate() { Minimap.Tick(); try { Game.DecorateLeaderboard(); Game.TrackStates(); } catch { } }
 
     string _lastScreen; float _nextScreen;
 
@@ -110,6 +110,8 @@ public class Plugin : BaseUnityPlugin
             catch { }
         }
         if (Cam.Auto && Game.Running && CameraInput()) Cam.NoteUserInput();
+        Weather.Tick();          // rain/snow particles + surface spawns (fails soft inside)
+        Game.SurfacesTick();     // ice/puddles/mud/snow under each car (fails soft inside)
         if (Input.GetKeyDown(BoostKey.Value))
         {
             var me = Game.StreamerVehicle();
@@ -180,6 +182,7 @@ public class Plugin : BaseUnityPlugin
         if (path == "overlay") path = "overlay.html";
         if (path == "minimap") path = "minimap.html";
         if (path == "leaderboard") path = "leaderboard.html";
+        if (path == "rankings") path = "rankings.html";
         var extension = Path.GetExtension(path);
         if (!Mime.TryGetValue(extension, out var mime)) return false;
         var assembly = typeof(Plugin).Assembly;
@@ -304,6 +307,23 @@ public class Plugin : BaseUnityPlugin
             string saved = null;
             try { saved = Game.SaveImage(login, Newtonsoft.Json.Linq.JObject.Parse(data)["data"]?.ToString()); } catch { }
             WriteJson(response, saved == null ? 400 : 200, saved == null ? new { error = "send {data: 'data:image/png;base64,…'}" } : (object)new { ok = true, path = saved, url = "/image/" + login });
+            return;
+        }
+        if (request.HttpMethod == "GET" && path == "standings")   // file reads: off the game thread
+        {
+            int.TryParse(request.QueryString["limit"], out var limit);
+            WriteJson(response, 200, Game.StandingsDto((request.QueryString["period"] ?? "week").ToLowerInvariant(), limit));
+            return;
+        }
+        if (request.HttpMethod == "GET" && path == "minimap/track.png")
+        {
+            byte[] png = null;
+            var read = new ManualResetEventSlim();
+            MainThread.Enqueue(() => { try { png = Minimap.TrackPng(); } catch { } finally { read.Set(); } });
+            read.Wait(5000);
+            if (png == null) { response.StatusCode = 404; response.Close(); return; }
+            response.ContentType = "image/png"; response.ContentLength64 = png.Length;
+            try { response.OutputStream.Write(png, 0, png.Length); response.Close(); } catch { }
             return;
         }
         if (request.HttpMethod == "GET" && path.StartsWith("image/"))

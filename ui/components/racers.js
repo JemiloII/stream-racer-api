@@ -4,7 +4,9 @@ import { html, useCss } from "../lib/html.js";
 import { api } from "../lib/api.js";
 import { useStore } from "../store.js";
 
-function RacerRow({ racer, streamer, uiSettings, starred, onToggleStar }) {
+// ranked = Ranked on: the mod's extras (boom, free boost, +boost, slow, shrink, grow, respawn, finish) are refused
+// by the API, so their buttons are greyed out here instead of failing.
+function RacerRow({ racer, streamer, uiSettings, starred, onToggleStar, ranked }) {
   const target = encodeURIComponent(racer.login);
   return html`
     <div class="row-r">
@@ -21,12 +23,14 @@ function RacerRow({ racer, streamer, uiSettings, starred, onToggleStar }) {
       <div class=${"pct" + (racer.finished ? " done" : "")}>${racer.finished ? "FIN" : racer.pct.toFixed(0) + "%"}</div>
       <div class="quick">
         <button class="c" title="chase cam on them" onClick=${() => api(`/camera/chase/${target}`)}>🎥</button>
-        <button class="b" title="boom" onClick=${() => api(`/boom/${target}`)}>💥</button>
-        <button class="z" title="boost now" onClick=${() => api(`/boost/${target}`)}>⚡</button>
-        <button class="p" title="+1 boost to their pool" onClick=${() => api(`/boost/${target}/add`)}><span class="plus">+</span>⚡</button>
-        <button class="s" title="slow" onClick=${() => api(`/speed/${target}?mult=${uiSettings.slowMult}&seconds=${uiSettings.slowSecs}`)}>🐌</button>
-        <button class="r" title="respawn" onClick=${() => api(`/respawn/${target}`)}>🏥</button>
-        <button class="f" title="mark as finished (crossed the line but the game missed it)" onClick=${() => confirm(`Mark ${racer.displayName} as finished?`) && api(`/finish/${target}`)}>🏁</button>
+        <button class="b" title="boom" disabled=${ranked} onClick=${() => api(`/boom/${target}`)}>💥</button>
+        <button class="z" title="boost now" disabled=${ranked} onClick=${() => api(`/boost/${target}`)}>⚡</button>
+        <button class="p" title="+1 boost to their pool" disabled=${ranked} onClick=${() => api(`/boost/${target}/add`)}><span class="plus">+</span>⚡</button>
+        <button class="s" title="slow" disabled=${ranked} onClick=${() => api(`/speed/${target}?mult=${uiSettings.slowMult}&seconds=${uiSettings.slowSecs}`)}>🐌</button>
+        <button class="sh" title="shrink (12 s)" disabled=${ranked} onClick=${() => api(`/shrink/${target}`)}>🐜</button>
+        <button class="gr" title="grow (12 s)" disabled=${ranked} onClick=${() => api(`/grow/${target}`)}>🦖</button>
+        <button class="r" title="respawn" disabled=${ranked} onClick=${() => api(`/respawn/${target}`)}>🏥</button>
+        <button class="f" title="mark as finished (crossed the line but the game missed it)" disabled=${ranked} onClick=${() => confirm(`Mark ${racer.displayName} as finished?`) && api(`/finish/${target}`)}>🏁</button>
         <button class="k" title="kick (lobby only)" onClick=${() => api(`/kick/${target}`)}>✕</button>
         <span class="boosts" title="boosts left"><b>${racer.boosts}</b></span>
       </div>
@@ -52,7 +56,7 @@ export default function Racers() {
         <input type="search" placeholder="search racers" value=${search} onInput=${(event) => setSearch(event.target.value)} />
       </header>
       ${rows.length
-        ? rows.map((racer) => html`<${RacerRow} key=${racer.login} racer=${racer} streamer=${snapshot.streamer} uiSettings=${uiSettings} starred=${starredLogins.has(racer.login)} onToggleStar=${toggleStar} />`)
+        ? rows.map((racer) => html`<${RacerRow} key=${racer.login} racer=${racer} streamer=${snapshot.streamer} uiSettings=${uiSettings} starred=${starredLogins.has(racer.login)} onToggleStar=${toggleStar} ranked=${settings.sendResults !== false} />`)
         : html`<div class="board-empty">${snapshot.vehicles.length ? "No match" : "No cars on track"}</div>`}
     </article>`;
 }

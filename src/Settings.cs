@@ -46,6 +46,9 @@ static class Settings
         public string respawnCommand = "!race respawn|!respawn"; // aliases separated by | or , (Pure.CommandAliases)
         public string showCommand = "!race show|!show";   // pops your name onto the mini map for a few seconds
         public string colorCommand = "!race color|!color";       // e.g. "!color #ff8800" or "!color red"
+        public bool driftCommandEnabled = true;                  // viewers can arm a drift on their own car (one pool boost)
+        public string driftCommand = "!race drift|!drift";       // aliases separated by | or , (Game.Drift)
+        public bool sendResults = true; // false = race results stay on this PC (no season points on the game's backend)
         public bool chatReplies = true; // confirm chat commands in Twitch chat through the game's own connection (Game.SayInChat)
         public CameraOpts camera = new(); // director shot toggles: camera.shots.{grid,high,side,sweep,pack,front,chase,orbit,overhead,prop,finish,duel,pileup,boom}
         public Dictionary<string, string> colors = new(); // login -> hex, persisted; applied whenever they join
@@ -55,7 +58,7 @@ static class Settings
         public string twitchLogin = "", twitchUserId = ""; // who the mod's token belongs to (set by /twitch/auth)
         public List<string> twitchScopes = new();          // its scopes (moderator:read:followers, user:write:chat, …)
         public JObject overlay = new(); // look & feel of /overlay (size, board rows, colors, ...)
-        public JObject minimap = new(); // in-game picture-in-picture map (enabled, x, y, w, h, marker, bg, ...)
+        public JObject minimap = new(); // enabled = the game's own map; the rest = the /minimap browser source's look
     }
 
     // Famous enough that there's no way they're actually in chat. mrbeast6000 is the real MrBeast.
@@ -71,6 +74,7 @@ static class Settings
     public static List<string> RespawnCommands => Pure.CommandAliases(Current.respawnCommand);
     public static List<string> ShowCommands => Pure.CommandAliases(Current.showCommand);
     public static List<string> ColorCommands => Pure.CommandAliases(Current.colorCommand);
+    public static List<string> DriftCommands => Pure.CommandAliases(Current.driftCommand);
     public static Dictionary<string, bool> Shots => Current.camera?.shots;
 
     static readonly string FilePath = Path.Combine(Paths.ConfigPath, "shibiko.streamracer.settings.json");
@@ -117,6 +121,10 @@ static class Settings
         if (string.IsNullOrWhiteSpace(model.respawnCommand)) model.respawnCommand = "!race respawn|!respawn";
         if (string.IsNullOrWhiteSpace(model.showCommand)) model.showCommand = "!race show|!show";
         if (string.IsNullOrWhiteSpace(model.colorCommand)) model.colorCommand = "!race color|!color";
+        if (string.IsNullOrWhiteSpace(model.driftCommand))
+        {
+            model.driftCommand = "!race drift|!drift";
+        }
         Upgrade(model);
         foreach (var key in Pure.ShotKeys) if (!model.camera.shots.ContainsKey(key)) model.camera.shots[key] = true; // a partial PUT never switches shots off by accident
         model.customBots = (model.customBots ?? new()).Where(entry => !string.IsNullOrWhiteSpace(entry.login)).Select(entry => { entry.login = entry.login.Trim().ToLowerInvariant(); entry.id ??= ""; return entry; }).ToList();
@@ -129,7 +137,8 @@ static class Settings
     public static object WithConfig() => new
     {
         Current.autoJoinStreamer, Current.streamerColor, Current.autoJoin, Current.customBots,
-        Current.colorLeaderboard, Current.leaderboardAvatars, Current.leaderboardPercent, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.showCommand, Current.respawnLimit, Current.chatReplies, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
+        Current.colorLeaderboard, Current.leaderboardAvatars, Current.leaderboardPercent, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.showCommand, Current.respawnLimit, Current.chatReplies, Current.sendResults, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
+        Current.driftCommandEnabled, Current.driftCommand,
         followerChecks = Game.FollowerChecks, followerChecksError = Game.FollowerCheckError, camera = Current.camera, Current.ui, Current.overlay, minimap = Minimap.State, bots = Bots,
         config = ConfigDto(),
     };

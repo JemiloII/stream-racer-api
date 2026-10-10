@@ -36,6 +36,13 @@ describe('browser-source pages', () => {
     expect(overlay.text).toMatch(/overlay\.js/);
   });
 
+  test('/rankings is an HTML page whatever the Accept header', async () => {
+    const rankings = await get('/rankings');
+    expect(rankings.status).toBe(200);
+    expect(rankings.contentType).toMatch(/text\/html/);
+    expect(rankings.text).toMatch(/rankings\.js/);
+  });
+
   test('/minimap is an HTML page whatever the Accept header', async () => {
     const minimap = await get('/minimap');
     expect(minimap.status).toBe(200);

@@ -52,6 +52,8 @@ import { api, withToken } from "./lib/api.js";
 /**
  * @typedef {object} UiSettings  Page defaults, saved in settings.ui so every browser / OBS dock shares them.
  * @property {number|string} boomCount      Controls → Boom ×
+ * @property {number|string} shrinkCount    Controls → Shrink ×
+ * @property {number|string} growCount      Controls → Grow ×
  * @property {number|string} addBoosts      Controls → Add boosts +
  * @property {number|string} slowMult       Controls → Slow all ×
  * @property {number|string} slowSecs       Controls → Slow all sec
@@ -79,12 +81,15 @@ import { api, withToken } from "./lib/api.js";
  * @property {boolean} [colorLeaderboard]
  * @property {boolean} [leaderboardAvatars]
  * @property {boolean} [leaderboardPercent]
+ * @property {boolean} [sendResults]               false = results stay on this PC (no season points)
  * @property {boolean} [colorCommandEnabled]
  * @property {string} [colorCommand]                  alias list, `!race color|!color`
  * @property {boolean} [respawnCommandEnabled]
  * @property {number} [respawnLimit]
  * @property {string} [respawnCommand]
  * @property {string} [showCommand]
+ * @property {boolean} [driftCommandEnabled]
+ * @property {string} [driftCommand]                  alias list, `!race drift|!drift`
  * @property {Record<string, string>} [colors]        saved car colors by login
  * @property {string} [twitchClientId]
  * @property {boolean} [twitchTokenSet]
@@ -93,7 +98,7 @@ import { api, withToken } from "./lib/api.js";
  */
 
 /** @type {UiSettings} */
-const DEFAULT_UI = { boomCount: 1, addBoosts: 1, slowMult: 0.3, slowSecs: 5, boostForce: "", boostSecs: "", cameraOnControls: false };
+const DEFAULT_UI = { boomCount: 1, shrinkCount: 10, growCount: 3, addBoosts: 1, slowMult: 0.3, slowSecs: 5, boostForce: "", boostSecs: "", cameraOnControls: false };
 
 // settings.ui can be partial or missing; the pages always see every default.
 const withUiDefaults = (settings) => ({ ...settings, ui: { ...DEFAULT_UI, ...settings.ui } });
@@ -102,7 +107,8 @@ const withUiDefaults = (settings) => ({ ...settings, ui: { ...DEFAULT_UI, ...set
 const SETTINGS_KEYS = [
   "autoJoinStreamer", "streamerColor", "autoJoin", "ui", "bots", "customBots", "overlay", "minimap", "camera",
   "colorLeaderboard", "leaderboardAvatars", "leaderboardPercent", "colorCommandEnabled", "colorCommand", "respawnCommandEnabled", "respawnLimit", "respawnCommand", "showCommand",
-  "colors", "perks", "twitchToken", "twitchClientId", "botOptions", "webhooks",
+  "driftCommandEnabled", "driftCommand",
+  "sendResults", "colors", "perks", "twitchToken", "twitchClientId", "botOptions", "webhooks",
 ];
 const pick = (object, keys) => Object.fromEntries(keys.map((key) => [key, object[key]]));
 

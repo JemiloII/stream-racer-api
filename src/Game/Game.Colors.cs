@@ -1,5 +1,6 @@
 // Game.Colors: a racer's color. Parsing (hex / named), setting it live on the car label and remembering it in settings,
-// re-applying saved colors on join, and painting names in the in-game leaderboard and the lobby/results rows.
+// re-applying saved colors on join, and painting names in the lobby/results rows. The in-game leaderboard and mini
+// map paint themselves from the profile color (Oct 2026 build); we only make them repaint when it changes.
 using HarmonyLib;
 
 namespace StreamRacerApi;
@@ -27,7 +28,13 @@ static partial class Game
         login = login.ToLowerInvariant();
         if (persist) { Settings.Current.colors[login] = "#" + ColorUtility.ToHtmlStringRGB(color); Settings.Persist(); }
         var vehicle = Find(login);
-        if (vehicle != null) { vehicle.Profile().SetColor(color); RecolorLabel(vehicle, color); }
+        if (vehicle != null)
+        {
+            vehicle.Profile().SetColor(color);
+            RecolorLabel(vehicle, color);
+            RepaintLeaderboard(vehicle);
+            Minimap.Recolor();
+        }
         if (!Running) foreach (var row in Object.FindObjectsOfType<PreGamePlayerListItem>()) // the lobby row is built once: repaint its name now
             if (row.Profile()?.Login() == login) ColorRowName(row.Profile(), row.NameText());
         return true;
@@ -73,22 +80,28 @@ static partial class Game
         if (PreferredColor(Login(vehicle), out var color)) vehicle.Profile().SetColor(color);
     }
 
-    // In-game leaderboard: paint each row's name in the car's color (or back to white when turned off).
+    // In-game leaderboard: the game paints name + colour bar in SetVehicle; we add the picture and percent each tick.
     static readonly System.Reflection.FieldInfo LeaderboardItemVehicle = AccessTools.Field(typeof(VehicleLeaderboardUIItem), GameNames.LeaderboardItemVehicle);
     static VehicleLeaderboardUIItem[] _leaderboardItems = new VehicleLeaderboardUIItem[0]; static float _leaderboardScanned = -10f, _leaderboardNext;
-    public static void ColorLeaderboard()
+    static IEnumerable<(VehicleLeaderboardUIItem item, Vehicle vehicle)> LeaderboardRows()
+    {
+        if (Time.unscaledTime - _leaderboardScanned > 2f) { _leaderboardItems = Object.FindObjectsOfType<VehicleLeaderboardUIItem>(); _leaderboardScanned = Time.unscaledTime; }
+        foreach (var item in _leaderboardItems)
+            if (item != null && item.NameText() != null) yield return (item, LeaderboardItemVehicle?.GetValue(item) as Vehicle);
+    }
+
+    public static void DecorateLeaderboard()
     {
         if (Time.unscaledTime < _leaderboardNext) return; _leaderboardNext = Time.unscaledTime + 0.25f;
         if (!Running) return;
-        if (Time.unscaledTime - _leaderboardScanned > 2f) { _leaderboardItems = Object.FindObjectsOfType<VehicleLeaderboardUIItem>(); _leaderboardScanned = Time.unscaledTime; }
-        bool enabled = Settings.Current.colorLeaderboard;
-        foreach (var item in _leaderboardItems)
-        {
-            if (item == null || item.NameText() == null) continue;
-            var vehicle = LeaderboardItemVehicle?.GetValue(item) as Vehicle;
-            item.NameText().color = enabled && vehicle != null && MayShowColoredName(vehicle) ? vehicle.Profile().Color() : Color.white;
-            DecorateLeaderboardRow(item, vehicle);
-        }
+        foreach (var (item, vehicle) in LeaderboardRows()) DecorateLeaderboardRow(item, vehicle);
+    }
+
+    // A colour changed mid-race: the game only paints a row when it builds it, so hand the row its car again.
+    static void RepaintLeaderboard(Vehicle vehicle)
+    {
+        if (!Running) return;
+        foreach (var (item, rowVehicle) in LeaderboardRows()) if (rowVehicle == vehicle) item.SetVehicle(vehicle);
     }
 
     // Lobby / results row: the name in the car's color (same switch and tier rule as the leaderboard). Runs from the list-item postfix.

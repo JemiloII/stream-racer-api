@@ -87,6 +87,7 @@ static partial class Game
         {
             points = points.Select(point => new[] { point.x, point.z }).ToList(),
             bounds = new { minX = points.Min(point => point.x), maxX = points.Max(point => point.x), minZ = points.Min(point => point.z), maxZ = points.Max(point => point.z) },
+            map = Minimap.GameMap(),   // the game's own road picture + projection, null until it has captured the map
         };
     }
 
@@ -96,10 +97,56 @@ static partial class Game
     static float _raceDistance = -1f;
     /// The distance from the grid to the finish line: 0% to 100%. -1 until the road has been mapped.
     public static float RaceDistance => _raceDistance;
+    // The first route distance (past `earliest`) at which the road is inside one of the gate's trigger colliders,
+    // refined between samples by halving. Height is probed at a few levels: the route line can run below the deck.
+    static float TriggerEntry(UnityStandardAssets.Utility.WaypointCircuit circuit, GameObject gate, List<Vector3> positions, List<float> along, float earliest)
+    {
+        var boxes = gate.GetComponentsInChildren<Collider>().Where(collider => collider.isTrigger).ToArray();
+        if (boxes.Length == 0)
+        {
+            return -1f;
+        }
+        for (int i = 1; i < positions.Count; i++)
+        {
+            if (along[i] < earliest || !InsideAny(boxes, positions[i]))
+            {
+                continue;
+            }
+            float outside = along[i - 1], inside = along[i];
+            for (int step = 0; step < 8; step++)
+            {
+                float middle = (outside + inside) * 0.5f;
+                if (InsideAny(boxes, circuit.GetRoutePoint(middle).Position())) inside = middle;
+                else outside = middle;
+            }
+            return inside;
+        }
+        return -1f;
+    }
+
+    static bool InsideAny(Collider[] boxes, Vector3 point)
+    {
+        foreach (var box in boxes)
+        {
+            for (float lift = 0f; lift <= 3f; lift += 1f)
+            {
+                var probe = point + Vector3.up * lift;
+                if ((box.ClosestPoint(probe) - probe).sqrMagnitude < 0.0001f) return true;
+            }
+        }
+        return false;
+    }
+
     public static bool FinishLine(out Vector3 position, out Vector3 direction, out float distance)
     {
         var circuit = Instances.WaypointController?.GetCircuit();
-        if (circuit == null) { position = direction = Vector3.zero; distance = -1f; return false; }
+        // a circuit the game has not built yet (lobby, scene load) throws inside GetRoutePoint
+        if (circuit == null || circuit.Waypoints() == null || circuit.Length() <= 0f)
+        {
+            position = direction = Vector3.zero;
+            distance = -1f;
+            return false;
+        }
         if (!ReferenceEquals(_finishCircuit, circuit) || _finishDistance < 0)
         {
             GameObject[] triggers;
@@ -134,7 +181,10 @@ static partial class Game
                     if (error < nearestError) { nearestError = error; nearest = i; }
                 }
                 if (nearestError > 60f) continue;                       // the road never really comes to this gate
-                float crossing = Pure.FinishCrossing(positions, along, line, directions[nearest]);
+                // Exact: where the road first runs into the gate's trigger box (that touch is what finishes a car).
+                // The pivot of the gate object is not the box, so the plane through it is only the fallback.
+                float crossing = TriggerEntry(circuit, trigger, positions, along, earliest);
+                if (crossing < 0f) crossing = Pure.FinishCrossing(positions, along, line, directions[nearest]);
                 if (crossing < earliest) crossing = along[nearest] < earliest ? -1f : along[nearest];
                 if (crossing > best) { best = crossing; bestLine = line; bestFacing = directions[nearest]; }
             }

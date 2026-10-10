@@ -1,5 +1,5 @@
-// Settings → Mini map: settings.minimap (the in-game picture-in-picture map and the /minimap browser source share
-// it) plus a link builder for OBS.
+// Settings → Mini map: settings.minimap. `enabled` shows/hides the game's own in-race map; the rest is the look of
+// the /minimap browser source, plus a link builder for OBS.
 import { useState } from "react";
 import { html } from "../../lib/html.js";
 import { useStore } from "../../store.js";
@@ -32,24 +32,21 @@ export default function MinimapCard() {
   return html`
     <article>
       <header>Mini map</header>
-      <p class="hint">In-game: drawn inside the game window (so it's on stream). Position and width are fractions of the screen from the bottom-left; height follows the track's shape unless you set it. Browser: links below.</p>
+      <p class="hint">In-game: the game's own mini map (position and size in the game's Settings). Browser: the same road picture with the car dots, links below.</p>
       <div class="ovgrid">
-        <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.enabled} onChange=${(event) => setMinimap("enabled", event.target.checked)} /><span>Show the mini map inside the game (the /minimap browser source always works)</span></label>
-      <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.mapTitle !== false} onChange=${(event) => setMinimap("mapTitle", event.target.checked)} /><span>Map name above the map (in game and browser)</span></label>
+        <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.enabled} onChange=${(event) => setMinimap("enabled", event.target.checked)} /><span>Show the game's mini map in game (the /minimap browser source always works)</span></label>
+      <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.mapTitle !== false} onChange=${(event) => setMinimap("mapTitle", event.target.checked)} /><span>Map name above the browser map</span></label>
       <label class="switch-row"><input type="checkbox" role="switch" checked=${!!minimap.mapAuthor} onChange=${(event) => setMinimap("mapAuthor", event.target.checked)} /><span>Show who built the map on a line of its own</span></label>
       <div class="aligns">
         <${AlignPicker} label="Map name" value=${minimap.mapTitleAlign || "center"} onChange=${(side) => setMinimap("mapTitleAlign", side)} />
         <${AlignPicker} label="Author" value=${minimap.mapAuthorAlign || "center"} onChange=${(side) => setMinimap("mapAuthorAlign", side)} />
       </div>
-        <${NumberField} values=${minimap} onChange=${setMinimap} name="x" label="Left (0-1)" />
-        <${NumberField} values=${minimap} onChange=${setMinimap} name="y" label="Bottom (0-1)" />
-        <${NumberField} values=${minimap} onChange=${setMinimap} name="w" label="Width (0-1)" />
-        <${SelectField} values=${minimap} name="aspect" label="Ratio (in-game and browser)" onChange=${setMinimap} options=${MINIMAP_RATIOS.map((ratio) => [ratio, ratioLabel(ratio)])} />
+        <${SelectField} values=${minimap} name="aspect" label="Ratio" onChange=${setMinimap} options=${MINIMAP_RATIOS.map((ratio) => [ratio, ratioLabel(ratio)])} />
         <${NumberField} values=${minimap} onChange=${setMinimap} name="marker" label="Car dot size (% of map)" step="0.5" />
-        <${NumberField} values=${minimap} onChange=${setMinimap} name="pad" label="Margin (1 = tight fit)" step="0.05" />
+        <${NumberField} values=${minimap} onChange=${setMinimap} name="pad" label="Margin before the game's picture loads (1 = tight fit)" step="0.05" />
         <label>Box color<input type="color" value=${minimap.bg} onChange=${(event) => setMinimap("bg", event.target.value)} /></label>
         <${NumberField} values=${minimap} onChange=${setMinimap} name="alpha" label="Box opacity (0-1)" step="0.05" />
-        <label>Track color<input type="color" value=${minimap.track} onChange=${(event) => setMinimap("track", event.target.value)} /></label>
+        <label>Title / fallback route color<input type="color" value=${minimap.track} onChange=${(event) => setMinimap("track", event.target.value)} /></label>
         <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.leaderBig} onChange=${(event) => setMinimap("leaderBig", event.target.checked)} /><span>Bigger dot for the leader</span></label>
         <label class="switch-row"><input type="checkbox" role="switch" checked=${minimap.names} onChange=${(event) => setMinimap("names", event.target.checked)} /><span>Names next to dots (kept from overlapping)</span></label>
       </div>

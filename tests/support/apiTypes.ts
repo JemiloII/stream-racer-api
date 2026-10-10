@@ -134,10 +134,6 @@ export interface PerkEvent {
 
 export interface MinimapState {
   enabled: boolean;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
   marker: number;
   bg: string;
   alpha: number;
@@ -274,6 +270,7 @@ export interface ZonesResponse {
 export interface TrackResponse {
   points: [number, number][];
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null;
+  map?: { cx: number; cz: number; ex: number; ez: number; image: string } | null;
 }
 
 export interface LobbyResult {

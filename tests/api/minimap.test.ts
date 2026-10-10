@@ -36,9 +36,7 @@ describe('POST /minimap', () => {
   test('the response is the full mini map state the pages draw from', async () => {
     const state = (await post<MinimapState>(`/minimap?on=${originallyEnabled ? 1 : 0}`)).json!;
     expect(state.aspect).toMatch(/^\d+:\d+$/);
-    expect(state.x).toEqual(expect.any(Number));
-    expect(state.y).toEqual(expect.any(Number));
-    expect(state.w).toBeGreaterThan(0);
+    expect(state.marker).toBeGreaterThan(0);
     expect(state.bg).toMatch(/^#[0-9a-f]{6}$/i);
     expect(state.live).toEqual(expect.any(Boolean));
   });

@@ -1,286 +1,84 @@
-// In-game picture-in-picture mini map, fully custom: a second orthographic camera that renders ONLY our
-// private layer, which holds a translucent backdrop, a line traced along the route, and one colored dot per car.
+// Mini map. In game the map is the game's own (MinimapView, Oct 2026 build); we only show or hide it (`enabled`).
+// The /minimap browser source draws the game's road picture (GET /minimap/track.png) and places the dots with the
+// game's own projection, so both maps line up. The look settings below are the browser page's.
 using Newtonsoft.Json.Linq;
 
 namespace StreamRacerApi;
 
 static class Minimap
 {
-    const int Layer = 30; // unused by the game
-
     public class Cfg
     {
-        public bool enabled = true;      // the IN-GAME map only; the /minimap browser source always works
-        public float x = 0.02f, y = 0.03f, w = 0.18f, h = 0f; // screen fractions from bottom-left; h = 0 -> follow the track's aspect
+        public bool enabled = true;      // the game's in-race mini map; the /minimap browser source always works
         public float marker = 3f;        // dot diameter as % of the map's height
         public string bg = "#000000"; public float alpha = 0f;
-        public string track = "#ffffff";
-        public float pad = 1.15f;        // margin around the track bounds
+        public string track = "#ffffff"; // route line colour when the game has no picture yet, and the title colour
+        public float pad = 1.15f;        // margin around the route line (the game's picture brings its own)
         public bool leaderBig = true;
-        public bool names = true;        // labels to the right of the dots; they never move (the view leaves room for them)
-        public bool mapTitle = true;     // the map's name above the map (in game and on the /minimap page)
+        public bool names = true;        // labels to the right of the dots
+        public bool mapTitle = true;     // the map's name above the map
         public bool mapAuthor = false;   // and who built it, on a second line
         public string mapTitleAlign = "center", mapAuthorAlign = "center";   // left | center | right
         public string aspect = "1:1";    // /minimap page: fills the window, keeps this ratio (16:9, 4:3, 1:1, 21:9, auto = track)
     }
     public static Cfg Current = new();
 
-    static Camera _camera;
-    static Transform _backdrop;
-    static LineRenderer _line;
-    static readonly Dictionary<Vehicle, Transform> _markers = new();
-    static readonly Dictionary<Vehicle, TextMesh> _labels = new();
-    static TextMesh _mapTitle, _mapAuthor;   // the map's name, and who built it, above the map
-    static Font _font;
-    static Material _material;
-    static Bounds _bounds;
-    static float _halfHeight, _centerOffsetX, _centerOffsetZ;
-
-    public static void Configure(JObject config) { Current = config?.ToObject<Cfg>() ?? new Cfg(); Apply(); }
+    public static void Configure(JObject config) => Current = config?.ToObject<Cfg>() ?? new Cfg();
 
     public static object State => new
     {
-        Current.enabled, Current.x, Current.y, Current.w, Current.h, Current.marker, Current.bg, Current.alpha, Current.track, Current.pad, Current.leaderBig, Current.names, Current.mapTitle, Current.mapAuthor, Current.mapTitleAlign, Current.mapAuthorAlign, Current.aspect,
-        live = _camera != null,
+        Current.enabled, Current.marker, Current.bg, Current.alpha, Current.track, Current.pad, Current.leaderBig, Current.names,
+        Current.mapTitle, Current.mapAuthor, Current.mapTitleAlign, Current.mapAuthorAlign, Current.aspect,
+        live = Instances.Minimap != null && Instances.Minimap.gameObject.activeSelf,
     };
 
-    static Material BaseMaterial() => _material ??= new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
-    static Color Parse(string hex, float alpha, Color fallback) { var color = ColorUtility.TryParseHtmlString(hex ?? "", out var parsed) ? parsed : fallback; color.a = alpha; return color; }
-
-    // Build or refresh everything from the config and the current track. Safe to call any time.
-    public static void Apply()
-    {
-        if (!Current.enabled || !Game.Running || Camera.main == null) { Destroy(); return; }
-        var route = Game.TrackPoints();
-        if (route.Count < 2) { Destroy(); return; }
-        _bounds = new Bounds(route[0], Vector3.zero);
-        foreach (var point in route) _bounds.Encapsulate(point);
-
-        float trackAspect = Mathf.Max(0.1f, _bounds.size.x) / Mathf.Max(0.1f, _bounds.size.z);
-        float height = Pure.MapHeight(Current.w, Screen.width, Screen.height, Pure.AspectRatio(Current.aspect, trackAspect)); // same ratio as the /minimap page
-        float boxAspect = (Current.w * Screen.width) / Mathf.Max(1f, height * Screen.height);
-        // room on the right for the names (they sit to the right of their dot and never move): about 12 characters
-        float baseHalf = Mathf.Max(_bounds.extents.z, _bounds.extents.x / boxAspect) * Current.pad + 2f;
-        float labelRoom = Current.names ? 12f * (baseHalf * 2f * Current.marker / 100f) * 0.62f : 0f;
-        _halfHeight = Mathf.Max(_bounds.extents.z * Current.pad, (_bounds.extents.x * Current.pad + labelRoom) / boxAspect) + 2f;
-        _centerOffsetX = labelRoom / 2f;
-        // room at the top for the map title, so it never sits on the track
-        float titleLines = (Current.mapTitle ? 1.8f : 0f) + (Current.mapAuthor ? 1.5f : 0f);
-        float titleRoom = (_halfHeight * 2f * Current.marker / 100f) * titleLines;
-        _halfHeight += titleRoom / 2f;
-        _centerOffsetZ = -titleRoom / 2f;
-
-        if (_camera == null)
-        {
-            var cameraObject = new GameObject("StreamRacerApi.Minimap");
-            _camera = cameraObject.AddComponent<Camera>();
-            _camera.orthographic = true;
-            _camera.clearFlags = CameraClearFlags.Depth;   // draw over the main view; our backdrop supplies the box
-            _camera.cullingMask = 1 << Layer;              // only our stuff
-            _camera.depth = Camera.main.depth + 5;
-            _camera.farClipPlane = 3000f;
-            Camera.main.cullingMask &= ~(1 << Layer);
-        }
-        _camera.rect = new Rect(Current.x, Current.y, Current.w, height);
-        _camera.orthographicSize = _halfHeight;
-        _camera.transform.position = new Vector3(_bounds.center.x + _centerOffsetX, _bounds.max.y + 400f, _bounds.center.z - _centerOffsetZ);
-        _camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-
-        // backdrop: a quad far below everything, sized to the viewport
-        if (_backdrop == null)
-        {
-            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad); Object.Destroy(quad.GetComponent<Collider>());
-            quad.name = "SRMinimap.Backdrop"; quad.layer = Layer; quad.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-            quad.GetComponent<Renderer>().material = new Material(BaseMaterial());
-            _backdrop = quad.transform;
-        }
-        _backdrop.position = new Vector3(_bounds.center.x, _bounds.min.y - 200f, _bounds.center.z);
-        _backdrop.localScale = new Vector3(_halfHeight * 2f * boxAspect + 10f, _halfHeight * 2f + 10f, 1f);
-        _backdrop.GetComponent<Renderer>().material.color = Parse(Current.bg, Mathf.Clamp01(Current.alpha), Color.black);
-
-        // route line
-        if (_line == null)
-        {
-            var lineObject = new GameObject("SRMinimap.Track"); lineObject.layer = Layer;
-            _line = lineObject.AddComponent<LineRenderer>();
-            _line.material = new Material(BaseMaterial());
-            _line.useWorldSpace = true; _line.loop = false;
-            _line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; _line.receiveShadows = false;
-            _line.numCornerVertices = 4; _line.numCapVertices = 4;
-        }
-        float lift = _bounds.max.y + 30f;
-        var linePoints = route.Select(point => new Vector3(point.x, lift, point.z)).ToArray();
-        _line.positionCount = linePoints.Length; _line.SetPositions(linePoints);
-        _line.startWidth = _line.endWidth = _halfHeight * 0.035f;
-        _line.material.color = Parse(Current.track, 1f, Color.white);
-    }
-
-    // StartCurrentGame only kicks off a countdown; build once the race is really running.
-    public static System.Collections.IEnumerator WhenRunning()
-    {
-        for (float waited = 0; waited < 120f && !Game.Running; waited += 0.5f) yield return new WaitForSeconds(0.5f);
-        yield return new WaitForSeconds(0.5f);
-        Apply();
-    }
-
-    public static void Destroy()
-    {
-        foreach (var marker in _markers.Values) if (marker != null) Object.Destroy(marker.gameObject);
-        _markers.Clear();
-        foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject);
-        _labels.Clear();
-        if (_mapTitle != null) { Object.Destroy(_mapTitle.gameObject); _mapTitle = null; }
-        if (_mapAuthor != null) { Object.Destroy(_mapAuthor.gameObject); _mapAuthor = null; }
-        if (_line != null) { Object.Destroy(_line.gameObject); _line = null; }
-        if (_backdrop != null) { Object.Destroy(_backdrop.gameObject); _backdrop = null; }
-        if (_camera != null) { Object.Destroy(_camera.gameObject); _camera = null; }
-    }
-
-    // Per frame: one colored disc per car above the route line.
+    // Per frame: keep the game's map shown or hidden as configured (the game re-creates it per map).
     public static void Tick()
     {
-        if (_camera == null) return;
-        // The game swaps cameras (prop cams, follow, free); none of them may draw our layer.
-        foreach (var camera in Camera.allCameras) if (camera != _camera && (camera.cullingMask & (1 << Layer)) != 0) camera.cullingMask &= ~(1 << Layer);
-        var alive = new HashSet<Vehicle>();
-        var leader = Cam.Leader();
-        float lift = _bounds.max.y + 40f;
-        ShowMapTitle(lift);
-        foreach (var vehicle in Game.Vehicles())
-        {
-            if (vehicle.Car() == null) continue;
-            alive.Add(vehicle);
-            if (!_markers.TryGetValue(vehicle, out var marker) || marker == null) _markers[vehicle] = marker = MakeMarker(vehicle);
-            float size = _halfHeight * 2f * Current.marker / 100f * (Current.leaderBig && vehicle == leader ? 1.6f : 1f) * (vehicle.HasFinished() ? 0.6f : 1f);
-            var position = vehicle.Car().transform.position;
-            marker.position = new Vector3(position.x, lift + (vehicle == leader ? 1f : 0f), position.z);
-            marker.localScale = new Vector3(size, size, size);
-        }
-        foreach (var gone in _markers.Keys.Where(vehicle => !alive.Contains(vehicle)).ToList()) { if (_markers[gone] != null) Object.Destroy(_markers[gone].gameObject); _markers.Remove(gone); }
-        Labels(alive, lift);
+        var view = Instances.Minimap;
+        if (view != null && view.gameObject.activeSelf != Current.enabled) view.gameObject.SetActive(Current.enabled);
     }
 
-    // Names sit to the right of their dot and stay there: no flipping at the edge, no pushing apart. The view is sized
-    // with room on the right (Apply), so a label near the edge still fits.
-    static void Labels(HashSet<Vehicle> alive, float lift)
+    // A racer's colour changed mid-race: the game's map picks dot colours when it binds the cars, so bind again.
+    public static void Recolor()
     {
-        bool anyRevealed = _revealUntil.Values.Any(until => Time.unscaledTime < until);
-        if (!Current.names && !anyRevealed) { if (_labels.Count > 0) { foreach (var label in _labels.Values) if (label != null) Object.Destroy(label.gameObject); _labels.Clear(); } return; }
-        if (!Current.names) alive = new HashSet<Vehicle>(alive.Where(vehicle => Revealed(Game.Login(vehicle))));   // only whoever asked to be shown
-        float size = _halfHeight * 2f * Current.marker / 100f;      // world units per dot
-        float gap = size * 0.7f;
-        foreach (var vehicle in alive)
-        {
-            if (!_labels.TryGetValue(vehicle, out var label) || label == null) _labels[vehicle] = label = MakeLabel(vehicle);
-            var position = vehicle.Car().transform.position;
-            label.text = vehicle.Profile().DisplayName() ?? Game.Login(vehicle);
-            label.color = vehicle.Profile().Color();
-            label.anchor = TextAnchor.MiddleLeft;
-            label.alignment = TextAlignment.Left;
-            label.characterSize = size * 0.32f;
-            label.transform.position = new Vector3(position.x + gap, lift + 2f, position.z);
-        }
-        foreach (var gone in _labels.Keys.Where(vehicle => !alive.Contains(vehicle)).ToList()) { if (_labels[gone] != null) Object.Destroy(_labels[gone].gameObject); _labels.Remove(gone); }
+        if (Game.Running && Instances.Minimap != null) Instances.Minimap.BindVehicles(Game.Vehicles().ToList());
     }
 
-    // The map's name and author, centred just above the map box (same idea as the browser page).
-    // The map's name, and optionally who built it, above the map. Each line is aligned on its own (left/center/right)
-    // and hangs down from the top edge into the room Apply() reserved, so nothing can clip off the view.
-    static float _titleLift;
-    static void ShowMapTitle(float lift)
-    {
-        _titleLift = lift + 2f;
-        var game = Instances.GameController?.CurrentGame();
-        string name = game?.MapName();
-        string creator = game != null ? Game.MapCreator(game.MapId()) : null;
-        bool wantTitle = Current.mapTitle && !string.IsNullOrEmpty(name);
-        bool wantAuthor = Current.mapAuthor && !string.IsNullOrEmpty(creator);
-        if (!wantTitle && _mapTitle != null) { Object.Destroy(_mapTitle.gameObject); _mapTitle = null; }
-        if (!wantAuthor && _mapAuthor != null) { Object.Destroy(_mapAuthor.gameObject); _mapAuthor = null; }
-        if (!wantTitle && !wantAuthor) return;
-
-        float size = _halfHeight * 2f * Current.marker / 100f;
-        float top = _camera.transform.position.z + _halfHeight * 0.99f;
-        var color = Parse(Current.track, 1f, Color.white);
-        if (wantTitle)
-        {
-            _mapTitle ??= MakeTitleText("SRMinimap.MapTitle");
-            PlaceTitleText(_mapTitle, name, size * 0.52f, color, Current.mapTitleAlign, top);
-        }
-        if (wantAuthor)
-        {
-            _mapAuthor ??= MakeTitleText("SRMinimap.MapAuthor");
-            PlaceTitleText(_mapAuthor, "by " + creator, size * 0.38f, color, Current.mapAuthorAlign, wantTitle ? top - size * 1.6f : top);
-        }
-    }
-
-    // "!race show" / "!show": pops a racer's name onto the map for a few seconds even when names are turned off.
-    static readonly Dictionary<string, float> _revealUntil = new();
+    // "!race show" / "!show": the browser page pops that racer's name for this long (the `show` event).
     public const float RevealSeconds = 5f;
-    public static void RevealName(string login, float seconds = RevealSeconds)
-    {
-        if (!string.IsNullOrEmpty(login)) _revealUntil[login.ToLowerInvariant()] = Time.unscaledTime + seconds;
-    }
-    public static bool Revealed(string login) => login != null && _revealUntil.TryGetValue(login.ToLowerInvariant(), out var until) && Time.unscaledTime < until;
 
-    static TextMesh MakeTitleText(string objectName)
+    // The game's projection for GET /track: picture u = 0.5 + (x - cx) / ex, v = 0.5 + (z - cz) / ez (v up).
+    public static object GameMap()
     {
-        _font ??= Resources.GetBuiltinResource<Font>("Arial.ttf") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        var titleObject = new GameObject(objectName) { layer = Layer };
-        titleObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        var text = titleObject.AddComponent<TextMesh>();
-        text.font = _font; text.fontSize = 48; text.fontStyle = FontStyle.Bold;
-        var renderer = titleObject.GetComponent<MeshRenderer>();
-        renderer.material = _font.material; renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
-        return text;
+        var capture = Instances.Minimap?.Capture();
+        var picture = capture?.Picture();
+        if (picture == null) return null;
+        var centre = capture.Centre(); var extent = capture.Extent();
+        return new { cx = centre.x, cz = centre.z, ex = extent.x, ez = extent.y, image = "/minimap/track.png?v=" + picture.GetInstanceID() };
     }
 
-    static void PlaceTitleText(TextMesh text, string value, float characterSize, Color color, string align, float z)
+    // The game's road picture as PNG. Read back once per capture (main thread only).
+    static byte[] _png; static int _pngOf;
+    public static byte[] TrackPng()
     {
-        float halfWidth = _halfHeight * _camera.aspect, centreX = _bounds.center.x + _centerOffsetX;
-        string side = (align ?? "center").Trim().ToLowerInvariant();
-        text.text = value; text.characterSize = characterSize; text.color = color;
-        text.anchor = side == "left" ? TextAnchor.UpperLeft : side == "right" ? TextAnchor.UpperRight : TextAnchor.UpperCenter;
-        text.alignment = side == "left" ? TextAlignment.Left : side == "right" ? TextAlignment.Right : TextAlignment.Center;
-        float x = side == "left" ? centreX - halfWidth + characterSize * 2f : side == "right" ? centreX + halfWidth - characterSize * 2f : centreX;
-        text.transform.position = new Vector3(x, _titleLift, z);
-    }
-
-    static TextMesh MakeLabel(Vehicle vehicle)
-    {
-        _font ??= Resources.GetBuiltinResource<Font>("Arial.ttf") ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        var labelObject = new GameObject("SRMinimap.Label." + Game.Login(vehicle)) { layer = Layer };
-        labelObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        var label = labelObject.AddComponent<TextMesh>();
-        label.font = _font; label.fontSize = 48; label.anchor = TextAnchor.MiddleLeft; label.alignment = TextAlignment.Left;
-        label.color = Color.white; label.fontStyle = FontStyle.Bold;
-        var renderer = labelObject.GetComponent<MeshRenderer>();
-        renderer.material = _font.material; renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
-        return label;
-    }
-
-    static Transform MakeMarker(Vehicle vehicle)
-    {
-        var markerObject = GameObject.CreatePrimitive(PrimitiveType.Quad); Object.Destroy(markerObject.GetComponent<Collider>());
-        markerObject.name = "SRMinimap." + Game.Login(vehicle); markerObject.layer = Layer;
-        markerObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        var renderer = markerObject.GetComponent<Renderer>();
-        renderer.material = new Material(BaseMaterial()) { color = vehicle.Profile().Color(), mainTexture = Disc() };
-        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; renderer.receiveShadows = false;
-        return markerObject.transform;
-    }
-
-    static Texture2D _disc;
-    static Texture2D Disc()
-    {
-        if (_disc != null) return _disc;
-        const int size = 64; _disc = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
+        var picture = Instances.Minimap?.Capture()?.Picture();
+        if (picture == null) return null;
+        if (_png != null && _pngOf == picture.GetInstanceID()) return _png;
+        var previous = RenderTexture.active;
+        var texture = new Texture2D(picture.width, picture.height, TextureFormat.RGBA32, false);
+        try
         {
-            float distance = Vector2.Distance(new Vector2(x + .5f, y + .5f), new Vector2(size / 2f, size / 2f)) / (size / 2f);
-            _disc.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01((1f - distance) * 8f)));
+            RenderTexture.active = picture;
+            texture.ReadPixels(new Rect(0, 0, picture.width, picture.height), 0, 0);
+            texture.Apply();
+            _png = texture.EncodeToPNG(); _pngOf = picture.GetInstanceID();
         }
-        _disc.Apply();
-        return _disc;
+        finally
+        {
+            RenderTexture.active = previous;
+            Object.Destroy(texture);
+        }
+        return _png;
     }
 }

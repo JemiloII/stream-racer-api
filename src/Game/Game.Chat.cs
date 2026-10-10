@@ -34,6 +34,12 @@ static partial class Game
     }
     static void Reply(string text) { if (Settings.Current.chatReplies) SayInChat(text); }
 
+    static void RankedRefusal(string login, string displayName, string command)
+    {
+        Plugin.Emit("denied", new { login, displayName, command, reason = "ranked race" });
+        Reply("@" + displayName + " ranked race: !" + command + " is off");
+    }
+
     // Scopes of the game's token (id.twitch.tv/oauth2/validate), refreshed hourly: chat:edit present = replies show up.
     static List<string> _scopes; static System.DateTime _scopesAt = System.DateTime.MinValue; static bool _scopesBusy; static string _scopesError;
     public static object ChatStatus()
@@ -70,15 +76,29 @@ static partial class Game
         login = login.ToLowerInvariant(); displayName = string.IsNullOrEmpty(displayName) ? login : displayName;
         if (Pure.CommandArg(message, Settings.ShowCommands) == "")
         {
-            Minimap.RevealName(login);
             Plugin.Emit("show", new { login, displayName, seconds = Minimap.RevealSeconds });
             return;
         }
         if (Settings.Current.respawnCommandEnabled && Pure.CommandArg(message, Settings.RespawnCommands) == "")
         {
+            if (RankedMode)
+            {
+                RankedRefusal(login, displayName, "respawn");
+                return;
+            }
             var mine = Find(login); if (mine == null) return;
             if (RespawnsLeft(login) == 0) { Plugin.Emit("denied", new { login, displayName, command = "respawn", reason = "no respawns left", respawns = 0 }); return; }
             if (Respawn(mine)) NoteChatRespawn(login); // Respawn emits the respawn event itself
+            return;
+        }
+        if (Settings.Current.driftCommandEnabled && Pure.CommandArg(message, Settings.DriftCommands) == "")
+        {
+            if (RankedMode)
+            {
+                RankedRefusal(login, displayName, "drift");
+                return;
+            }
+            OnDriftCommand(login, displayName);   // Game.Drift
             return;
         }
         if (!Settings.Current.colorCommandEnabled) return;

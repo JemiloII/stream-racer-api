@@ -1,0 +1,13 @@
+/* OBS browser source, the local standings (GET /standings): transparent except the panel. */
+:root { --hazard: #ffd400; --side: 24px; --scale: 1; --font: "Chakra Petch", Impact, sans-serif; }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; font-family: var(--font); color: #fff; }
+#rankings { position: absolute; top: var(--side); left: var(--side); transform: scale(var(--scale)); transform-origin: top left; min-width: 240px; }
+#rankings:has(#rows:empty) { display: none; }
+#title { margin: 0 0 6px; font-size: 16px; letter-spacing: .08em; text-transform: uppercase; color: var(--hazard); text-shadow: 0 1px 2px #000; }
+#rows { display: grid; gap: 4px; }
+.row { display: grid; grid-template-columns: 26px 1fr auto auto; column-gap: 10px; align-items: center; padding: 4px 10px 4px 6px; background: rgba(0,0,0,.72); border-left: 3px solid var(--c, #fff); border-radius: 4px; font-size: 14px; font-weight: 600; text-shadow: 0 1px 2px #000; }
+.row .n { color: rgba(255,255,255,.7); text-align: right; }
+.row:nth-child(1) .n { color: var(--hazard); }
+.row .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c, #fff); }
+.row .wins { color: rgba(255,255,255,.6); font-size: 12px; }
+.row .pts { font-variant-numeric: tabular-nums; }

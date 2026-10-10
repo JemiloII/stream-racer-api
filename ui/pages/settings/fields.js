@@ -1,5 +1,5 @@
 // Form fields the Settings cards share. Both live at module level on purpose: pages re-render 60×/s during a race,
-// and a component defined inside a render would remount the input and wipe what is being typed (see CLAUDE.md).
+// and a component defined inside a render would remount the input and wipe what is being typed (see the project notes).
 import { html } from "../../lib/html.js";
 
 // Number input bound to values[name]; commits on blur / Enter, only when the value changed.
