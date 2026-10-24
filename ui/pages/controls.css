@@ -1,4 +1,5 @@
-.grid2 { display: grid; grid-template-columns: minmax(320px, 400px) 1fr; gap: 22px; align-items: start; }
+.grid2 { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.grid2 > * { min-width: 0; }   /* the timing board must not push wider than its column (it slid over the cards) */
 @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } } /* below this the timing board's action buttons get clipped beside the cards */
 .stack { display: grid; gap: 14px; min-width: 0; }
 .cam-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -17,6 +18,9 @@
 .action .label { font: 600 13px/1.2 var(--display); letter-spacing: .06em; text-transform: uppercase; }
 .action .label small { display: block; font: 400 12px/1.3 var(--pico-font-family); text-transform: none; letter-spacing: 0; color: var(--dim); margin-top: 3px; }
 .action .fields { display: flex; gap: 6px; align-items: center; }
+/* rows with a row of buttons (chaos, weather, road): label on top, buttons on their own line, wrapping */
+.action.wide { grid-template-columns: 1fr; }
+.action.wide .fields { flex-wrap: wrap; }
 .action .fields button { margin: 0; height: 36px; padding: 0 14px; }
 .field { display: flex; align-items: center; margin: 0; background: #0b0d10; border: 1px solid var(--line-2); border-radius: 4px; height: 36px; }
 .field span { padding: 0 8px 0 10px; height: 34px; color: #eef0f2; font: 700 14px/34px var(--display); letter-spacing: .08em; text-transform: uppercase; }

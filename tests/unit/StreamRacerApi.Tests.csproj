@@ -11,6 +11,7 @@
   <ItemGroup>
     <!-- compile the pure file straight in: no game/BepInEx assemblies needed -->
     <Compile Include="..\..\src\Pure.cs" Link="src\Pure.cs" />
+    <Compile Include="..\..\src\Gif.cs" Link="src\Gif.cs" />
     <Compile Include="**\*.cs" Exclude="bin\**;obj\**" />
   </ItemGroup>
   <ItemGroup>

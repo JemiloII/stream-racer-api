@@ -172,9 +172,9 @@ public static class Pure
 
     // ---- ranked ----
     // Ranked on (settings.sendResults): only the game's own racing counts, so the API refuses what the mod adds on top
-    // (free / extra boosts, slow, shrink, grow, drift, weather, surfaces, marking a finish, every respawn incl. your own,
+    // (free / extra boosts, slow, grow, drift, weather, surfaces, marking a finish, every respawn incl. your own,
     // API booms, the game's chaos effects fired through the API). Allowed: lobby, joins, colours, camera, spending a car's own boost pool (/boost/me, /boost/:x/use).
-    static readonly HashSet<string> RankedBlockedRoots = new() { "boom", "speed", "shrink", "grow", "drift", "surface", "weather", "finish", "respawn", "effect" };
+    static readonly HashSet<string> RankedBlockedRoots = new() { "boom", "speed", "grow", "drift", "surface", "weather", "finish", "respawn", "effect", "chaos" };
     public static bool RankedBlocks(string root, string target, string action)
     {
         if (RankedBlockedRoots.Contains(root ?? "")) return true;
@@ -539,7 +539,7 @@ public static class Pure
     }
 
     // ---- camera director ----
-    public static readonly string[] ShotKeys = { "grid", "high", "side", "sweep", "pack", "front", "chase", "orbit", "overhead", "prop", "finish", "duel", "pileup", "boom" };
+    public static readonly string[] ShotKeys = { "grid", "high", "side", "sweep", "pack", "front", "chase", "orbit", "overhead", "prop", "finish", "duel", "pileup", "boom", "plane" };
 
     // Director shot key -> toggle name: "high2" is a high shot, "front:login" a front shot, "wide:login" has no toggle ("wide").
     public static string ShotKind(string key)

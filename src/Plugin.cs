@@ -16,7 +16,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.44.0"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.45.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
@@ -88,6 +88,48 @@ public class Plugin : BaseUnityPlugin
         StartHttp();
     }
 
+    // Camera.main drawn into a 1280x720 texture (no UI overlay): lets tests see the 3D scene with the window minimized.
+    // ?near=<login>: a throwaway camera beside and in front of that car instead, so a test can look closely without
+    // ever moving the streamer's camera.
+    static byte[] CameraShot(string near)
+    {
+        var main = Camera.main;
+        var car = string.IsNullOrEmpty(near) ? null : Game.Find(near)?.Car();
+        Camera camera = main;
+        GameObject temporary = null;
+        if (car != null)
+        {
+            temporary = new GameObject("sr-test-camera");
+            camera = temporary.AddComponent<Camera>();
+            var forward = car.transform.forward;
+            temporary.transform.position = car.transform.position + forward * 6f + car.transform.right * 3f + Vector3.up * 2f;
+            temporary.transform.LookAt(car.transform.position + Vector3.up * 1.4f);
+            camera.enabled = false;
+        }
+        if (camera == null)
+        {
+            return null;
+        }
+        var target = RenderTexture.GetTemporary(1280, 720, 24);
+        var before = camera.targetTexture;
+        camera.targetTexture = target;
+        camera.Render();
+        camera.targetTexture = before;
+        var active = RenderTexture.active;
+        RenderTexture.active = target;
+        var texture = new Texture2D(1280, 720, TextureFormat.RGB24, false);
+        texture.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0);
+        RenderTexture.active = active;
+        RenderTexture.ReleaseTemporary(target);
+        var png = texture.EncodeToPNG();
+        Destroy(texture);
+        if (temporary != null)
+        {
+            Destroy(temporary);
+        }
+        return png;
+    }
+
     public static string BaseUrl => $"http://127.0.0.1:{Port.Value}/";
 
     void LateUpdate() { Minimap.Tick(); try { Game.DecorateLeaderboard(); Game.TrackStates(); } catch { } }
@@ -109,9 +151,11 @@ public class Plugin : BaseUnityPlugin
             }
             catch { }
         }
-        if (Cam.Auto && Game.Running && CameraInput()) Cam.NoteUserInput();
+        Cam.PlaneCamInput();     // any key / click / scroll leaves the air-raid plane cam
+        if (Cam.Auto && Game.Running && !Cam.OnPlane && CameraInput()) Cam.NoteUserInput();
         Weather.Tick();          // rain/snow particles + surface spawns (fails soft inside)
         Game.SurfacesTick();     // ice/puddles/mud/snow under each car (fails soft inside)
+        Chaos.Tick();            // random chaos events (fails soft inside)
         if (Input.GetKeyDown(BoostKey.Value))
         {
             var me = Game.StreamerVehicle();
@@ -313,6 +357,43 @@ public class Plugin : BaseUnityPlugin
         {
             int.TryParse(request.QueryString["limit"], out var limit);
             WriteJson(response, 200, Game.StandingsDto((request.QueryString["period"] ?? "week").ToLowerInvariant(), limit));
+            return;
+        }
+        if (request.HttpMethod == "GET" && path == "find/shot.png") // dev aid: what the game camera sees, even minimized
+        {
+            byte[] shot = null;
+            var rendered = new ManualResetEventSlim();
+            MainThread.Enqueue(() =>
+            {
+                try
+                {
+                    shot = CameraShot(request.QueryString["near"]);
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    rendered.Set();
+                }
+            });
+            rendered.Wait(5000);
+            if (shot == null)
+            {
+                response.StatusCode = 404;
+                response.Close();
+                return;
+            }
+            response.ContentType = "image/png";
+            response.ContentLength64 = shot.Length;
+            try
+            {
+                response.OutputStream.Write(shot, 0, shot.Length);
+                response.Close();
+            }
+            catch
+            {
+            }
             return;
         }
         if (request.HttpMethod == "GET" && path == "minimap/track.png")

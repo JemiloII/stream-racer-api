@@ -20,6 +20,7 @@ export function CameraControls() {
   return html`
     <div class="cam-row">
       <button class=${camera.auto ? "" : "secondary"} onClick=${() => api("/camera/auto")}>${camera.auto ? "Auto: ON" : "Auto: off"}</button>
+      ${camera.mode === "plane" ? html`<button class="boom" onClick=${() => api("/camera/plane/off")}>Plane cam off</button>` : null}
       ${SHOT_BUTTONS.map(([label, path]) => html`<button key=${label} class="secondary" onClick=${() => api(path)}>${label}</button>`)}
     </div>
     <p class="hint" style=${{ margin: "8px 0 0" }}>${describeCamera(camera)}</p>`;

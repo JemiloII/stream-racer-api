@@ -9,6 +9,7 @@ import ChatCommandsCard from "./settings/ChatCommandsCard.js";
 import NamesAndColorsCard from "./settings/NamesAndColorsCard.js";
 import WebhooksCard from "./settings/WebhooksCard.js";
 import ResultsCard from "./settings/ResultsCard.js";
+import ChaosCard from "./settings/ChaosCard.js";
 import MinimapCard from "./settings/MinimapCard.js";
 import OverlayCard from "./settings/OverlayCard.js";
 import ApiTokenCard from "./settings/ApiTokenCard.js";
@@ -25,6 +26,7 @@ export default function SettingsPage() {
       <${ChatCommandsCard} />
       <${NamesAndColorsCard} />
       <${ResultsCard} />
+      <${ChaosCard} />
       <${WebhooksCard} />
       <${MinimapCard} />
       <${OverlayCard} />

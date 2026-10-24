@@ -3,7 +3,6 @@
 // image + name color swaps. Obfuscated targets are named through GameNames.
 using System.Reflection;
 using HarmonyLib;
-using UnityStandardAssets.Vehicles.Car;
 
 namespace StreamRacerApi;
 
@@ -22,8 +21,8 @@ static class Patches
         freeCam.transform.position = position;
     }
 
-    [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.NewGame))]
-    static void OnNewGame() { Weather.EndOfRace(); Game.Ended = false; Game.ForgetPerks(); Plugin.Instance.StartCoroutine(Settings.OnLobby()); Game.EnsureAvatars(); }
+    [HarmonyPostfix, HarmonyPatch(typeof(GameController), GameNames.NewGame)]
+    static void OnNewGame() { Weather.EndOfRace(); Cam.OnRaceEnd(); Game.Ended = false; Game.ForgetPerks(); Plugin.Instance.StartCoroutine(Settings.OnLobby()); Game.EnsureAvatars(); }
 
     // Every boom, whether from bits, the API, or anything else, goes through the vehicle's explode method.
     [HarmonyPostfix, HarmonyPatch(typeof(Vehicle), GameNames.VehicleExplode, typeof(string))]   // Explode() just calls Explode(null)
@@ -33,7 +32,7 @@ static class Patches
     [HarmonyPostfix, HarmonyPatch(typeof(Vehicle), GameNames.VehicleUseBoost)]
     static void OnPoolBoost(Vehicle __instance, bool __result) { if (__result) Plugin.Emit("boost", Game.EventDto(__instance)); }
 
-    [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.StartCurrentGame))]
+    [HarmonyPostfix, HarmonyPatch(typeof(GameController), GameNames.StartCurrentGame)]
     static void OnStart()
     { Game.ForgetLearnedFinish(); Game.ForgetFinishOrder();
         Game.ResetBoomTracking(); Game.EnsureAvatars();
@@ -41,17 +40,17 @@ static class Patches
         Plugin.Emit("race_start", Game.Snapshot()); Game.EmitBoostPools();
     }
 
-    [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.AddFinisherToCurrentGame))]
+    [HarmonyPostfix, HarmonyPatch(typeof(GameController), GameNames.AddFinisher)]
     static void OnFinisher([HarmonyArgument(GameNames.FinisherArg)] Vehicle finisher)
     {
         Game.LearnFinishDistance(finisher);   // now we know exactly how far the line is: everyone else's percent follows it
         Plugin.Emit("finisher", Game.Dto(finisher, Game.NoteFinished(finisher)));
     }
 
-    [HarmonyPrefix, HarmonyPatch(typeof(GameController), nameof(GameController.EndCurrentGame))]
+    [HarmonyPrefix, HarmonyPatch(typeof(GameController), GameNames.EndCurrentGame)]
     static void EndPrefix(out bool __state) => __state = Game.Running;
 
-    [HarmonyPostfix, HarmonyPatch(typeof(GameController), nameof(GameController.EndCurrentGame))]
+    [HarmonyPostfix, HarmonyPatch(typeof(GameController), GameNames.EndCurrentGame)]
     static void EndPostfix(bool __state)
     {
         Weather.EndOfRace();   // weather + laid surfaces end with the race
@@ -66,20 +65,21 @@ static class Patches
     }
 
     // settings.sendResults = false: the race result never leaves this PC. The game gets the answer it builds itself for
-    // local test maps (places, no points), so its post-race screen still runs; no season points are credited.
+    // local test maps (the request echoed back: every racer, same race id, same places, no points), so its post-race
+    // screen runs and the Grand Prix accepts it (it rejects anything that isn't that echo with a RETRY menu).
     [HarmonyPrefix, HarmonyPatch(typeof(MapApi), GameNames.ResultUpload)]
-    static bool KeepResultsLocal(RaceResultCallback __2)   // (request, local, onReply, onError)
+    static bool KeepResultsLocal(RaceResultRequest __0, RaceResultCallback __2)   // (request, local, onReply, onError)
     {
         if (Settings.Current.sendResults) return true;
-        __2?.Invoke(Game.LocalRaceResult());
+        __2?.Invoke(Game.LocalRaceResult(__0));
         return false;
     }
 
     // Saved color before the game builds the lobby row and spawns the preview, so the car and its row match from the start.
-    [HarmonyPrefix, HarmonyPatch(typeof(VehicleManager), nameof(VehicleManager.AddVehicle))]
+    [HarmonyPrefix, HarmonyPatch(typeof(VehicleManager), GameNames.AddVehicle)]
     static void BeforeAdd([HarmonyArgument(GameNames.AddVehicleArg)] Vehicle vehicle) { if (vehicle != null) Game.ApplySavedColor(vehicle); }
 
-    [HarmonyPostfix, HarmonyPatch(typeof(VehicleManager), nameof(VehicleManager.AddVehicle))]
+    [HarmonyPostfix, HarmonyPatch(typeof(VehicleManager), GameNames.AddVehicle)]
     static void OnAdd([HarmonyArgument(GameNames.AddVehicleArg)] Vehicle vehicle)
     {
         if (Instances.VehicleManager.HasPlayerAlreadyJoined(Game.Login(vehicle)))
@@ -89,6 +89,15 @@ static class Patches
             Plugin.Instance.StartCoroutine(Game.AnnounceTitle(vehicle));
             Plugin.Emit("joined", Game.Dto(vehicle, 0));
         }
+    }
+
+    // Alt-tabbed: the game's follow cam returns early while the window is unfocused (meant to ignore the mouse), so it
+    // stopped placing itself and follow / chase shots froze on stream. Place it anyway; input stays ignored.
+    static readonly MethodInfo FollowCamPlace = AccessTools.Method(typeof(FollowCam), GameNames.FollowCamPlace);
+    [HarmonyPostfix, HarmonyPatch(typeof(FollowCam), nameof(FollowCam.LateUpdate))]
+    static void AfterFollowCam(FollowCam __instance)
+    {
+        if (!Application.isFocused) FollowCamPlace?.Invoke(__instance, null);
     }
 
     [HarmonyPrefix, HarmonyPatch(typeof(FollowCam), nameof(FollowCam.LateUpdate))]
@@ -113,6 +122,7 @@ static class Patches
             Game.OnChatMessage(message.Username, message.Message, message.DisplayName);
         }
         catch { }
+        Chaos.Guard("chat", () => Chaos.OnChat(args?.ChatMessage));   // Gigantify an Emote (Chaos.Giantify)
     }
 
     // AI driver's per-frame speed logic overwrites the multiplier; reapply ours after it.

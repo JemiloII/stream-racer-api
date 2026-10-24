@@ -3,7 +3,7 @@
 namespace StreamRacerApi;
 
 // What the plugin's camera director is doing. None = nothing of ours is active (the game's own camera, or no race).
-enum CameraMode { None, Follow, FollowWide, Free, Chase, Front, Pack, Sweep, Side, High, Orbit, Overhead, Prop, Finish, Grid, Manual }
+enum CameraMode { None, Follow, FollowWide, Free, Chase, Front, Pack, Sweep, Side, High, Orbit, Overhead, Prop, Finish, Grid, Manual, Plane }
 
 static class CameraModes
 {
@@ -19,7 +19,7 @@ static class CameraModes
     public static bool IsSteered(this CameraMode mode) => mode switch
     {
         CameraMode.Chase or CameraMode.Front or CameraMode.Orbit or CameraMode.Pack or CameraMode.Sweep or CameraMode.Side
-            or CameraMode.High or CameraMode.Overhead or CameraMode.Finish or CameraMode.Grid => true,
+            or CameraMode.High or CameraMode.Overhead or CameraMode.Finish or CameraMode.Grid or CameraMode.Plane => true,
         _ => false,
     };
 }

@@ -9,7 +9,7 @@ namespace StreamRacerApi;
 
 static class Settings
 {
-    public class Entry { public string id = ""; public string login = ""; public string displayName; public string color; public bool sub; public string image; }
+    public class Entry { public string id = ""; public string login = ""; public string displayName = null; public string color = null; public bool sub = false; public string image = null; }
     // Who gets what. Tiers: "everyone" | "follower" | "subscriber" | "off". Extra boosts stack (a subscribed follower gets both).
     public class BotOpts { public bool autoBoost = true; }
     public class Webhook { public string @event = "race_end"; public string url = ""; public string method = "POST"; public string header = ""; public string body = ""; public bool enabled = true; }
@@ -18,6 +18,18 @@ static class Settings
     // Camera director: which shots it may pick. Missing key = on (Pure.ShotEnabled). Manual POST /camera/<shot> ignores this.
     public class CameraOpts { public Dictionary<string, bool> shots = DefaultShots(); }
     public static Dictionary<string, bool> DefaultShots() => Pure.ShotKeys.ToDictionary(key => key, _ => true);
+
+    // Random chaos events during a race (src/Chaos). Off while Ranked. events: name -> on (missing key = on).
+    public class ChaosOpts
+    {
+        public bool enabled = true;
+        public float minSeconds = 25f, maxSeconds = 60f;   // gap between two random events
+        public Dictionary<string, bool> events = new();
+        public bool giantify = true;   // a gigantified emote in chat booms cars and paints the emote (Chaos.Giantify)
+        public float umaRaceChance = 0.2f;   // chance a race is an Uma race (every car a horse girl, the Uma theme)
+        public int giantifyBits = 100; // what Gigantify an Emote costs on this channel (Twitch's chat line doesn't say): one boom per 10
+        public bool On(string name) => events == null || !events.TryGetValue(name, out var on) || on;
+    }
 
     public class Perks
     {
@@ -53,6 +65,7 @@ static class Settings
         public CameraOpts camera = new(); // director shot toggles: camera.shots.{grid,high,side,sweep,pack,front,chase,orbit,overhead,prop,finish,duel,pileup,boom}
         public Dictionary<string, string> colors = new(); // login -> hex, persisted; applied whenever they join
         public Perks perks = new();
+        public ChaosOpts chaos = new();   // random events: meteors, dragon, tornado, raid, witch, magical girl, black hole
         public string twitchToken = "";    // optional: a token with moderator:read:followers (from your overlay/bot app) for follower checks
         public string twitchClientId = ""; // the client id that token belongs to
         public string twitchLogin = "", twitchUserId = ""; // who the mod's token belongs to (set by /twitch/auth)
@@ -138,7 +151,7 @@ static class Settings
     {
         Current.autoJoinStreamer, Current.streamerColor, Current.autoJoin, Current.customBots,
         Current.colorLeaderboard, Current.leaderboardAvatars, Current.leaderboardPercent, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.showCommand, Current.respawnLimit, Current.chatReplies, Current.sendResults, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
-        Current.driftCommandEnabled, Current.driftCommand,
+        Current.driftCommandEnabled, Current.driftCommand, Current.chaos,
         followerChecks = Game.FollowerChecks, followerChecksError = Game.FollowerCheckError, camera = Current.camera, Current.ui, Current.overlay, minimap = Minimap.State, bots = Bots,
         config = ConfigDto(),
     };

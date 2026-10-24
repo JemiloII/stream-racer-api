@@ -119,11 +119,25 @@ static partial class Game
         }
     }
 
-    // What the backend would have answered, built here (places only, no points): the game's own reply for local test maps.
-    public static RaceResultResponse LocalRaceResult() => new()
+    // What the backend would have answered, built here exactly like the game's own offline branch: the request echoed
+    // back, every racer with the race id and place it was sent with, no points. Without a request (shouldn't happen)
+    // the finishers in crossing order.
+    public static RaceResultResponse LocalRaceResult(RaceResultRequest request)
     {
-        RaceResults = Ranked().Where(vehicle => vehicle.HasFinished())
-            .Select((vehicle, index) => new RaceResultResponseItem { UserID = vehicle.Profile().BackendId(), Pos = index + 1 })
-            .ToArray(),
-    };
+        if (request?.RaceResults != null)
+        {
+            return new RaceResultResponse
+            {
+                RaceResults = request.RaceResults
+                    .Select(item => new RaceResultResponseItem { UserID = item.UserID, GameID = request.GameID, Pos = item.Pos })
+                    .ToArray(),
+            };
+        }
+        return new RaceResultResponse
+        {
+            RaceResults = Ranked().Where(vehicle => vehicle.HasFinished())
+                .Select((vehicle, index) => new RaceResultResponseItem { UserID = vehicle.Profile().BackendId(), Pos = index + 1 })
+                .ToArray(),
+        };
+    }
 }

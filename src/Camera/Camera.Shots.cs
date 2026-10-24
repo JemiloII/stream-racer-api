@@ -233,6 +233,11 @@ static partial class Cam
                 wanted = _finishCameraPosition; lookAt = focus;
                 break;
             }
+            case CameraMode.Plane:
+            {
+                if (!PlaneShot(out wanted, out lookAt)) { EndPlaneCam(); return; }
+                break;
+            }
             case CameraMode.Grid:
             {
                 var all = Racing(); if (all.Count == 0) { Mode = CameraMode.None; return; }

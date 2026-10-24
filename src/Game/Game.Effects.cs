@@ -1,12 +1,12 @@
-// Game.Effects: the game's own chaos effects (Oct 10 2026 build), fired through each effect's own controller, the
-// same entry its Twitch extension uses: bananas, oil, cones, nuke, vsc (virtual safety car). The controllers do the
-// visuals, banners and rules; `by` is who gets the credit on the banner. POST /effect/:name.
+// Game.Effects: the game's own chaos effects fired through their own controllers (the same entry the game's Twitch
+// extension uses). Only the virtual safety car is offered; bananas, oil, cones, nuke and shrink were taken out on
+// purpose. POST /effect/vsc.
 
 namespace StreamRacerApi;
 
 static partial class Game
 {
-    public static readonly string[] EffectNames = { "bananas", "oil", "cones", "nuke", "vsc" };
+    public static readonly string[] EffectNames = { "vsc" };
 
     // Null = started; otherwise why not.
     public static string StartEffect(string name, string by)
@@ -15,32 +15,15 @@ static partial class Game
         {
             return "no race running";
         }
-        bool started;
-        switch ((name ?? "").ToLowerInvariant())
+        if ((name ?? "").ToLowerInvariant() != "vsc")
         {
-            case "bananas":
-                started = BananaPeelController.Begin(by);
-                break;
-            case "oil":
-                started = OilSpillController.Begin(by);
-                break;
-            case "cones":
-                started = TrafficConeController.Begin(by);
-                break;
-            case "nuke":
-                started = NukeController.Begin(by);
-                break;
-            case "vsc":
-                started = VirtualSafetyCarController.Begin(by);
-                break;
-            default:
-                return "unknown effect (bananas, oil, cones, nuke, vsc)";
+            return "unknown effect (vsc)";
         }
-        if (!started)
+        if (!RenamedMethods.BeginSafetyCar(by))
         {
-            return "the game refused it (not racing, or that effect is already running)";
+            return "the game refused it (not racing, or the safety car is already out)";
         }
-        Plugin.Emit("effect", new { effect = name.ToLowerInvariant(), by });
+        Plugin.Emit("effect", new { effect = "vsc", by });
         return null;
     }
 }

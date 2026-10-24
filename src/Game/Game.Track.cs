@@ -99,7 +99,7 @@ static partial class Game
     public static float RaceDistance => _raceDistance;
     // The first route distance (past `earliest`) at which the road is inside one of the gate's trigger colliders,
     // refined between samples by halving. Height is probed at a few levels: the route line can run below the deck.
-    static float TriggerEntry(UnityStandardAssets.Utility.WaypointCircuit circuit, GameObject gate, List<Vector3> positions, List<float> along, float earliest)
+    static float TriggerEntry(WaypointCircuit circuit, GameObject gate, List<Vector3> positions, List<float> along, float earliest)
     {
         var boxes = gate.GetComponentsInChildren<Collider>().Where(collider => collider.isTrigger).ToArray();
         if (boxes.Length == 0)

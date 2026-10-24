@@ -7,7 +7,6 @@ namespace StreamRacerApi.Tests.Pure;
 public class RankedTests
 {
     [Theory]
-    [InlineData("shrink", null, null)]
     [InlineData("grow", "sr_test_a", null)]
     [InlineData("speed", "all", null)]
     [InlineData("drift", "me", null)]
@@ -17,7 +16,7 @@ public class RankedTests
     [InlineData("boom", "3", null)]
     [InlineData("respawn", "all", null)]
     [InlineData("respawn", "me", null)]
-    [InlineData("effect", "nuke", null)]
+    [InlineData("effect", "vsc", null)]
     [InlineData("boost", "all", null)]
     [InlineData("boost", "sr_test_a", "add")]
     public void The_mods_extras_are_refused(string root, string target, string action)

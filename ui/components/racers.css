@@ -3,7 +3,7 @@
 .board-head b { color: #eef0f2; }
 .board-head input { width: 220px; height: 34px; padding: 0 10px; font: 500 14px var(--pico-font-family); letter-spacing: 0; text-transform: none; }
 .board-empty { padding: 40px 16px 48px; text-align: center; color: var(--mute); font: 600 13px var(--display); letter-spacing: .2em; text-transform: uppercase; }
-.row-r { display: grid; grid-template-columns: 44px 26px minmax(110px, 1fr) minmax(150px, 2.2fr) 48px auto; gap: 0 10px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); animation: slide .25s ease both; }
+.row-r { display: grid; grid-template-columns: 44px 26px minmax(110px, 1fr) minmax(70px, 2.2fr) 48px auto; gap: 0 10px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--line); animation: slide .25s ease both; }
 @keyframes slide { from { opacity: 0; transform: translateX(-6px); } }
 .row-r:hover { background: #171a1e; }
 .pos { font: 700 26px/1 var(--display); color: var(--mute); text-align: right; padding-right: 6px; }
@@ -22,14 +22,14 @@
 .track.done i { background: var(--live); }
 .pct { font: 600 15px var(--display); text-align: right; color: var(--dim); }
 .pct.done { color: var(--live); }
-.quick { display: flex; gap: 3px; align-items: center; }
+.quick { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px; align-items: center; }
 .quick button { width: 32px; height: 30px; margin: 0; padding: 0; border: 1px solid var(--line-2); background: transparent; color: #eef0f2; border-radius: 3px; font: 700 15px/1 var(--display); letter-spacing: 0; display: inline-flex; align-items: center; justify-content: center; }
 .quick .plus { font-size: 13px; margin-right: -2px; }
 .quick .k { font-size: 12px; color: var(--dim); }
 .quick button:hover { color: #000; }
 .quick .b:hover { background: var(--boom); border-color: var(--boom); }
 .quick .z:hover, .quick .p:hover { background: var(--boost); border-color: var(--boost); }
-.quick .s:hover, .quick .sh:hover { background: var(--slow); border-color: var(--slow); }
+.quick .s:hover { background: var(--slow); border-color: var(--slow); }
 .quick .gr:hover { background: var(--boost); border-color: var(--boost); }
 .quick .r:hover { background: var(--live); border-color: var(--live); }
 .quick .k:hover { background: #eef0f2; }

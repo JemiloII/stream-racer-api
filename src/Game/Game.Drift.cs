@@ -4,8 +4,6 @@
 // fires a mini-turbo that grows with the drift's length. Chat: settings.driftCommand; API: POST /drift/:x.
 using System.Collections;
 using HarmonyLib;
-using UnityStandardAssets.Utility;
-using UnityStandardAssets.Vehicles.Car;
 
 namespace StreamRacerApi;
 

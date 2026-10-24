@@ -4,7 +4,7 @@ import { html, useCss } from "../lib/html.js";
 import { api } from "../lib/api.js";
 import { useStore } from "../store.js";
 
-// ranked = Ranked on: the mod's extras (boom, free boost, +boost, slow, shrink, grow, respawn, finish) are refused
+// ranked = Ranked on: the mod's extras (boom, free boost, +boost, slow, grow, respawn, finish) are refused
 // by the API, so their buttons are greyed out here instead of failing.
 function RacerRow({ racer, streamer, uiSettings, starred, onToggleStar, ranked }) {
   const target = encodeURIComponent(racer.login);
@@ -27,7 +27,6 @@ function RacerRow({ racer, streamer, uiSettings, starred, onToggleStar, ranked }
         <button class="z" title="boost now" disabled=${ranked} onClick=${() => api(`/boost/${target}`)}>⚡</button>
         <button class="p" title="+1 boost to their pool" disabled=${ranked} onClick=${() => api(`/boost/${target}/add`)}><span class="plus">+</span>⚡</button>
         <button class="s" title="slow" disabled=${ranked} onClick=${() => api(`/speed/${target}?mult=${uiSettings.slowMult}&seconds=${uiSettings.slowSecs}`)}>🐌</button>
-        <button class="sh" title="shrink (12 s)" disabled=${ranked} onClick=${() => api(`/shrink/${target}`)}>🐜</button>
         <button class="gr" title="grow (12 s)" disabled=${ranked} onClick=${() => api(`/grow/${target}`)}>🦖</button>
         <button class="r" title="respawn" disabled=${ranked} onClick=${() => api(`/respawn/${target}`)}>🏥</button>
         <button class="f" title="mark as finished (crossed the line but the game missed it)" disabled=${ranked} onClick=${() => confirm(`Mark ${racer.displayName} as finished?`) && api(`/finish/${target}`)}>🏁</button>

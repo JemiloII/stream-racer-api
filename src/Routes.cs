@@ -38,7 +38,20 @@ static class Routes
         if (method == "GET" && root == "track") return target == "zones" ? Game.ZonesDto() : Game.TrackDto(query["raw"] == "1");
         if (method == "GET" && root == "surface") return Game.SurfacesDto();
         if (method == "GET" && root == "weather") return Weather.Dto();
+        if (method == "GET" && root == "chaos") return Chaos.Dto();
         if (method == "GET" && root == "motion") return Cam.MotionDto();   // physics rate vs frame rate: why a shot might look rough
+        if (method == "GET" && root == "find" && target == "shaders") // dev aid: every shader loaded (looking for a toon one)
+        {
+            return Resources.FindObjectsOfTypeAll<Shader>()
+                .Select(shader => new
+                {
+                    name = shader.name,
+                    supported = shader.isSupported,
+                    properties = shader.GetPropertyCount(),
+                })
+                .OrderBy(shader => shader.name)
+                .ToList();
+        }
         if (method == "GET" && root == "find") // dev aid: GameObjects whose name contains q, with path + components + text
         {
             string needle = (query["q"] ?? "").ToLowerInvariant(); int max = int.TryParse(query["max"], out var parsedMax) ? parsedMax : 80;
@@ -196,19 +209,16 @@ static class Routes
                 return Targets(target, ref status, vehicle => Game.Boost(vehicle, force, seconds));
             }
 
-            case "shrink":
             case "grow":
             {
-                bool grow = root == "grow";
-                target ??= grow ? "3" : "10";   // no target = random cars: 10 like the game's shrink ray, 3 giants
-                float scale = float.TryParse(query["scale"], out var parsedScale) ? parsedScale : grow ? Game.GrowScale : Game.ShrinkScale;
-                scale = grow ? Mathf.Clamp(scale, 1.05f, 3f) : Mathf.Clamp(scale, 0.1f, 0.95f);
+                target ??= "3";   // no target = 3 random cars
+                float scale = Mathf.Clamp(float.TryParse(query["scale"], out var parsedScale) ? parsedScale : Game.GrowScale, 1.05f, 3f);
                 float seconds = Mathf.Clamp(float.TryParse(query["seconds"], out var parsedSeconds) ? parsedSeconds : Game.ResizeSeconds, 1f, 60f);
                 if (!Game.Running) { status = 409; return new { error = "no race running" }; }
-                var resized = Game.ResizeTargets(target, scale, seconds, query["except"]);
-                if (resized.Count == 0) { status = 404; return new { error = "no car to " + root, target }; }
-                Game.AnnounceResize(grow, resized, query["by"]);
-                return new { ok = true, affected = resized.Count, scale, seconds };
+                var grown = Game.ResizeTargets(target, scale, seconds, query["except"]);
+                if (grown.Count == 0) { status = 404; return new { error = "no car to grow", target }; }
+                Game.AnnounceGrow(grown, query["by"]);
+                return new { ok = true, affected = grown.Count, scale, seconds };
             }
 
             case "speed":
@@ -310,6 +320,9 @@ static class Routes
             case "weather":
                 return Weather.Request(target, query, ref status);
 
+            case "chaos":
+                return Chaos.Request(target, query, ref status);
+
             case "finish":
                 if (target == null) { status = 400; return new { error = "need /finish/:target" }; }
                 return One(target, Game.MarkFinished, ref status);
@@ -330,6 +343,9 @@ static class Routes
                 bool ok;
                 switch (target)
                 {
+                    case "plane":   // POST /camera/plane/off: leave the air-raid plane cam
+                        Cam.EndPlaneCam();
+                        return Cam.State;
                     case "auto":
                         Cam.SetAuto(query["on"] == null ? !Cam.Auto : query["on"] == "1" || query["on"] == "true");
                         return Cam.State;

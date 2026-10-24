@@ -25,8 +25,14 @@ static class Weather
     static readonly Color FogOnlyColor = new(0.7f, 0.72f, 0.74f);
     const float FirstSpawnSeconds = 3f;
     const float LightningMinSeconds = 15f, LightningMaxSeconds = 45f;   // random gap between strikes while it rains
-    const float LightningFlashSeconds = 0.25f;                          // how long the bolt and the flash last
-    const float LightningHeight = 70f;                                  // the bolt starts this far above the car
+    const float LightningHeight = 160f;                                 // the bolt starts this far above the car
+    const float LightningWidth = 4f;                                    // at the top; it tapers to a third at the car
+    const float LightningJag = 9f;                                      // sideways wander of the channel
+    const int LightningSegments = 22, LightningBranches = 3;
+    static readonly float[] LightningFlickers = { 0.22f, 0.08f, 0.16f, 0.07f, 0.4f };   // on, off, on, off, on (s)
+    const float SkyBoltMinSeconds = 4f, SkyBoltMaxSeconds = 10f;        // harmless bolts in view between the strikes
+    const float SkyBoltDistance = 90f, SkyBoltSpread = 70f;             // how far ahead of the camera, and how wide
+    const float LightningLightIntensity = 8f, LightningLightRange = 90f;
     const float RainSpawnEvery = 10f;
     const int PuddlesPerSpawn = 2;
     const float SnowSpawnEvery = 12f, SnowSpawnLength = 35f;
@@ -47,6 +53,7 @@ static class Weather
     static float _until;            // unscaled time it ends; 0 = until cleared
     static float _nextSpawn;
     static float _nextStrike;
+    static float _nextSkyBolt;
     static ParticleSystem _emitter;
     static Material _particleMaterial;
     static bool _fogSaved, _savedFog;
@@ -110,6 +117,7 @@ static class Weather
         _until = seconds > 0f ? Time.unscaledTime + seconds : 0f;
         _nextSpawn = Time.unscaledTime + FirstSpawnSeconds;
         _nextStrike = Time.unscaledTime + Random.Range(LightningMinSeconds, LightningMaxSeconds);
+        _nextSkyBolt = Time.unscaledTime + Random.Range(SkyBoltMinSeconds, SkyBoltMaxSeconds);
         Guarded(() => ApplyFog(kind));
         if (kind == WeatherKind.Rain || kind == WeatherKind.Snow)
         {
@@ -141,6 +149,7 @@ static class Weather
     public static void EndOfRace()
     {
         Clear();
+        Chaos.Clear();
         Game.ClearSurfaces();
     }
 
@@ -164,6 +173,11 @@ static class Weather
         {
             _nextStrike = Time.unscaledTime + Random.Range(LightningMinSeconds, LightningMaxSeconds);
             Guarded(Strike);
+        }
+        if (Current == WeatherKind.Rain && Game.Running && Time.unscaledTime >= _nextSkyBolt)
+        {
+            _nextSkyBolt = Time.unscaledTime + Random.Range(SkyBoltMinSeconds, SkyBoltMaxSeconds);
+            Guarded(SkyBolt);
         }
     }
 
@@ -295,48 +309,135 @@ static class Weather
         _emitter = null;
     }
 
-    // Lightning: a jagged bolt from the sky onto a random car, a white flash of the scene's sun, and the car booms
-    // "by storm" (the game's own boom: the RIP line in the feed says so).
+    // Lightning: a big jagged bolt (with branches and a glow) comes down on a random car, flickers a few times with the
+    // scene's sun and a light at the impact flaring, and the car booms as it hits (the game's own boom, "by storm").
     static void Strike()
     {
-        var struck = Game.StrikeRandomCar("storm");
+        var struck = Game.PickStrikeTarget();
         if (struck == null)
         {
             return;
         }
-        var target = struck.Car().transform.position;
-        Plugin.Instance.StartCoroutine(Bolt(target));
+        Plugin.Instance.StartCoroutine(Bolt(struck));
         Plugin.Emit("lightning", new { login = Game.Login(struck), displayName = struck.Profile().DisplayName() });
     }
 
-    static System.Collections.IEnumerator Bolt(Vector3 target)
+    // A bolt into the ground somewhere in front of the camera: the storm is visible even when nobody is hit.
+    static void SkyBolt()
     {
-        var bolt = new GameObject("sr-lightning").AddComponent<LineRenderer>();
-        bolt.material = ParticleMaterial();
-        bolt.startColor = bolt.endColor = new Color(0.9f, 0.95f, 1f, 1f);
-        bolt.startWidth = 1.2f;
-        bolt.endWidth = 0.4f;
-        bolt.shadowCastingMode = ShadowCastingMode.Off;
-        const int points = 12;
-        bolt.positionCount = points;
-        for (int i = 0; i < points; i++)
+        var camera = Camera.main;
+        if (camera == null)
         {
-            float along = i / (float)(points - 1);
-            var jitter = i == 0 || i == points - 1 ? Vector3.zero : new Vector3(Random.Range(-4f, 4f), 0f, Random.Range(-4f, 4f));
-            bolt.SetPosition(i, target + Vector3.up * LightningHeight * (1f - along) + jitter);
+            return;
         }
+        var ahead = camera.transform.forward;
+        ahead.y = 0f;
+        var sideways = Vector3.Cross(Vector3.up, ahead.normalized);
+        var spot = camera.transform.position + ahead.normalized * SkyBoltDistance
+            + sideways * Random.Range(-SkyBoltSpread, SkyBoltSpread) * 0.5f;
+        spot.y = camera.transform.position.y - 20f;
+        if (Physics.Raycast(spot + Vector3.up * 200f, Vector3.down, out var ground, 400f))
+        {
+            spot = ground.point;
+        }
+        Plugin.Instance.StartCoroutine(Bolt(null, spot));
+    }
+
+    // struck = the car to hit (it follows the car and booms it), or null for a harmless bolt at `spot`.
+    static System.Collections.IEnumerator Bolt(Vehicle struck, Vector3 spot = default)
+    {
+        var root = new GameObject("sr-lightning");
+        var material = BoltMaterial();
+        var channel = BoltLine(root, material, LightningWidth, new Color(1f, 1f, 1f, 1f));
+        var glow = BoltLine(root, material, LightningWidth * 4f, new Color(0.6f, 0.75f, 1f, 0.35f));
+        var branches = new List<LineRenderer>();
+        for (int i = 0; i < LightningBranches; i++)
+        {
+            branches.Add(BoltLine(root, material, LightningWidth * 0.35f, new Color(0.85f, 0.92f, 1f, 0.9f)));
+        }
+        var flare = root.AddComponent<Light>();
+        flare.type = LightType.Point;
+        flare.color = new Color(0.8f, 0.88f, 1f);
+        flare.range = LightningLightRange;
         var sun = RenderSettings.sun;
-        float before = sun != null ? sun.intensity : 0f;
+        float sunBefore = sun != null ? sun.intensity : 0f;
+        bool boomed = false;
+        for (int flicker = 0; flicker < LightningFlickers.Length; flicker++)
+        {
+            bool on = flicker % 2 == 0;
+            if (struck != null && struck.Car() == null)
+            {
+                break;
+            }
+            var target = struck != null ? struck.Car().transform.position : spot;
+            if (on)
+            {
+                Channel(channel, glow, branches, target);   // a fresh shape each flash, at the car's current spot
+            }
+            root.SetActive(on);
+            flare.intensity = on ? LightningLightIntensity : 0f;
+            root.transform.position = target + Vector3.up * 3f;
+            if (sun != null)
+            {
+                sun.intensity = on ? sunBefore * 3f + 1f : sunBefore;
+            }
+            if (on && !boomed && struck != null)
+            {
+                boomed = true;
+                Game.StrikeCar(struck, "storm");
+            }
+            yield return new WaitForSeconds(LightningFlickers[flicker]);
+        }
         if (sun != null)
         {
-            sun.intensity = before * 3f + 1f;
+            sun.intensity = sunBefore;
         }
-        yield return new WaitForSeconds(LightningFlashSeconds);
-        if (sun != null)
+        Object.Destroy(root);
+    }
+
+    static Material _boltMaterial;
+    static Material BoltMaterial() => _boltMaterial ??= new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
+
+    static LineRenderer BoltLine(GameObject root, Material material, float width, Color color)
+    {
+        var line = new GameObject("bolt").AddComponent<LineRenderer>();
+        line.transform.SetParent(root.transform, false);
+        line.material = material;
+        line.startColor = line.endColor = color;
+        line.startWidth = width;
+        line.endWidth = width / 3f;
+        line.numCapVertices = 2;
+        line.shadowCastingMode = ShadowCastingMode.Off;
+        line.receiveShadows = false;
+        return line;
+    }
+
+    // The main channel from the sky to the car (jagged, straight at both ends), its glow on the same points, and a few
+    // short branches forking off the upper part.
+    static void Channel(LineRenderer channel, LineRenderer glow, List<LineRenderer> branches, Vector3 target)
+    {
+        var points = new Vector3[LightningSegments];
+        for (int i = 0; i < LightningSegments; i++)
         {
-            sun.intensity = before;
+            float along = i / (float)(LightningSegments - 1);
+            float wander = i == 0 || i == LightningSegments - 1 ? 0f : LightningJag * (1f - along * 0.6f);
+            points[i] = target + Vector3.up * LightningHeight * (1f - along) + new Vector3(Random.Range(-wander, wander), 0f, Random.Range(-wander, wander));
         }
-        Object.Destroy(bolt.gameObject);
+        channel.positionCount = glow.positionCount = points.Length;
+        channel.SetPositions(points);
+        glow.SetPositions(points);
+        foreach (var branch in branches)
+        {
+            int from = Random.Range(2, LightningSegments / 2);
+            var start = points[from];
+            var direction = new Vector3(Random.Range(-1f, 1f), -Random.Range(0.6f, 1.2f), Random.Range(-1f, 1f)).normalized;
+            const int length = 6;
+            branch.positionCount = length;
+            for (int i = 0; i < length; i++)
+            {
+                branch.SetPosition(i, start + direction * (i * 7f) + new Vector3(Random.Range(-2f, 2f), 0f, Random.Range(-2f, 2f)));
+            }
+        }
     }
 
     static void FollowCamera()
@@ -403,7 +504,7 @@ static class Weather
     }
 
     // A built-in blended shader found at runtime, textured with a soft round dot drawn here.
-    static Material ParticleMaterial()
+    public static Material ParticleMaterial()
     {
         if (_particleMaterial != null)
         {

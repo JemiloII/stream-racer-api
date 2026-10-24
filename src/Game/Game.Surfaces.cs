@@ -4,8 +4,6 @@
 // on: grip through the game's own GripFor, top speed + drag through the AI speed postfix (Patches.AfterAiSurface).
 using System.Collections.Specialized;
 using UnityEngine.Rendering;
-using UnityStandardAssets.Utility;
-using UnityStandardAssets.Vehicles.Car;
 using SurfaceKind = StreamRacerApi.Pure.SurfaceKind;
 using SurfacePatch = StreamRacerApi.Pure.SurfacePatch;
 using SurfaceEffect = StreamRacerApi.Pure.SurfaceEffect;
@@ -30,13 +28,10 @@ static partial class Game
     const float IceGrip = 0.35f;
     const float IceCornerDegrees = 25f;            // ice weight +1 per this many degrees the stretch turns
     const float IceStraightWeight = 0.1f;          // weight of a dead straight stretch (corners win)
-    const float PuddleSpeed = 0.55f, PuddleGrip = 0.45f;   // a real splash: lifts off and twitches if it hits mid-corner
-    const float PuddleSpinChance = 0.35f;          // chance to spin out on a puddle in a ~60° bend (scales with the bend)
-    const float PuddleSpinDegrees = 60f;           // the bend (over PuddleSpinLook units) that gives the full chance
-    const float PuddleSpinLook = 30f;
-    const float PuddleSpinMinSpeed = 12f;          // m/s: slower cars just splash through
-    const float PuddleSpinYaw = 3.5f;              // rad/s kick into the bend: the tail steps out
-    const float PuddleSpinGrip = 0.15f, PuddleSpinSeconds = 1.1f;
+    const float PuddleSpeed = 0.85f, PuddleGrip = 1f;   // grip is the oil slip below, not the grip effect
+    // A puddle is as slippery as the game's oil spill, with its exact numbers: forward x0.65 / sideways x0.1 grip and a
+    // random steering kick, held 3 s, eased back to normal over 1.25 s.
+    const float SlipForward = 0.65f, SlipSideways = 0.1f, SlipHoldSeconds = 3f, SlipEaseSeconds = 1.25f;
     const float PuddleLingerSeconds = 1.5f;        // a puddle's slow outlives the splash
     const float PuddleMinRadius = 1.5f, PuddleMaxRadius = 3f;
     const int MudBlobsPerPatch = 2, SnowBlobsPerPatch = 3;         // a "patch" of mud / blob-snow = this many blobs
@@ -342,7 +337,7 @@ static partial class Game
             bool firstContact = Pure.NotePass(laid.Patch, Login(vehicle), SnowPackPerPass, SnowPackFloor);
             if (firstContact && laid.Patch.Kind == SurfaceKind.Puddle)
             {
-                MaybeSpinOut(vehicle, body, speed);
+                Slip(vehicle);
             }
             effect = Pure.Combine(effect, EffectOf(laid.Patch, speed));
             if (laid.Patch.Kind == SurfaceKind.Puddle)
@@ -360,30 +355,43 @@ static partial class Game
             return;   // the last effect runs out on its own (EffectLingerSeconds)
         }
         SurfaceEffects[controller] = (effect, Time.unscaledTime + linger);
-        bool spinning = SpinningUntil.TryGetValue(vehicle, out var until) && Time.unscaledTime < until;
-        if (effect.Grip < 1f && !spinning)
+        if (effect.Grip < 1f)
         {
             RefreshGrip(vehicle, effect.Grip, linger);
         }
     }
 
-    // Hitting a puddle mid-bend at speed can spin the car: almost no grip for a second and the tail kicked out.
-    static readonly Dictionary<Vehicle, float> SpinningUntil = new();
-    static void MaybeSpinOut(Vehicle vehicle, Rigidbody body, float speed)
+    // Oil-spill slip on a puddle (the game's own oil effect on the car). One at a time per car.
+    static readonly HashSet<Vehicle> Slipping = new();
+    static void Slip(Vehicle vehicle)
     {
-        if (body == null || speed < PuddleSpinMinSpeed)
+        if (!Slipping.Add(vehicle))
         {
             return;
         }
-        float bend = RouteTurnAhead(vehicle.Progress(), PuddleSpinLook);
-        if (Random.value > PuddleSpinChance * Mathf.Clamp01(Mathf.Abs(bend) / PuddleSpinDegrees))
-        {
-            return;
-        }
-        SpinningUntil[vehicle] = Time.unscaledTime + PuddleSpinSeconds;
-        vehicle.GripFor(PuddleSpinGrip, PuddleSpinSeconds);
-        body.angularVelocity += Vector3.up * Mathf.Sign(bend) * PuddleSpinYaw;
+        vehicle.OilGrip(SlipForward, SlipSideways);
+        vehicle.OilSpin(Random.Range(-1f, 1f));
+        Plugin.Instance.StartCoroutine(EaseSlip(vehicle));
         Plugin.Emit("spinout", new { login = Login(vehicle), on = "puddle" });
+    }
+
+    static System.Collections.IEnumerator EaseSlip(Vehicle vehicle)
+    {
+        yield return new WaitForSeconds(SlipHoldSeconds);
+        for (float time = 0f; time < SlipEaseSeconds; time += Time.deltaTime)
+        {
+            float eased = time / SlipEaseSeconds;
+            if (vehicle.Car() != null)
+            {
+                vehicle.OilGrip(Mathf.Lerp(SlipForward, 1f, eased), Mathf.Lerp(SlipSideways, 1f, eased));
+            }
+            yield return null;
+        }
+        if (vehicle.Car() != null)
+        {
+            vehicle.OilGrip(1f, 1f);
+        }
+        Slipping.Remove(vehicle);
     }
 
     static SurfaceEffect EffectOf(SurfacePatch patch, float speed)

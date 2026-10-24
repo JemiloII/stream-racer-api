@@ -6,7 +6,7 @@ import { useStore } from "../../store.js";
 // settings.camera.shots key → label on the page. Order = the order of the switches.
 export const DIRECTOR_SHOTS = [
   ["grid", "Grid start"], ["high", "High overview"], ["side", "Side"], ["sweep", "Sweep"], ["pack", "Pack"], ["front", "Front leader"], ["chase", "Chase leader"],
-  ["orbit", "Orbit"], ["overhead", "Overhead"], ["prop", "Track cams"], ["finish", "Finish cam"], ["duel", "Duel"], ["pileup", "Pile-up"], ["boom", "Boom orbit"],
+  ["orbit", "Orbit"], ["overhead", "Overhead"], ["prop", "Track cams"], ["finish", "Finish cam"], ["duel", "Duel"], ["pileup", "Pile-up"], ["boom", "Boom orbit"], ["plane", "Air-raid plane cam"],
 ];
 export const shotEnabled = (shots, key) => shots?.[key] !== false;
 

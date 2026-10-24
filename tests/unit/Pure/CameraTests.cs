@@ -24,7 +24,7 @@ public class CameraTests
     [Fact]
     public void Every_documented_shot_has_a_key()
     {
-        Assert.Equal(new[] { "grid", "high", "side", "sweep", "pack", "front", "chase", "orbit", "overhead", "prop", "finish", "duel", "pileup", "boom" }, ShotKeys);
+        Assert.Equal(new[] { "grid", "high", "side", "sweep", "pack", "front", "chase", "orbit", "overhead", "prop", "finish", "duel", "pileup", "boom", "plane" }, ShotKeys);
     }
 
     [Fact]

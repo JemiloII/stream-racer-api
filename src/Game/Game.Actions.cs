@@ -2,7 +2,6 @@
 // pool), slow-down, mark finished, kick.
 using System.Collections;
 using HarmonyLib;
-using UnityStandardAssets.Vehicles.Car;
 
 namespace StreamRacerApi;
 
@@ -33,8 +32,8 @@ static partial class Game
         return true;
     }
 
-    // Lightning (rain): a random racing car is boomed, credited to the storm ("RIP name · by storm").
-    public static Vehicle StrikeRandomCar(string by)
+    // Lightning (rain): pick a random racing car and reserve it (nothing else booms it while the bolt comes down).
+    public static Vehicle PickStrikeTarget()
     {
         if (!Running)
         {
@@ -45,16 +44,83 @@ static partial class Game
         {
             return null;
         }
-        var struck = targets[Random.Range(0, targets.Count)];
+        // a car the camera can see, when there is one: a strike off screen is a boom with no bolt to watch
+        var inView = targets.Where(OnScreen).ToList();
+        var pool = inView.Count > 0 ? inView : targets;
+        var struck = pool[Random.Range(0, pool.Count)];
         BoomedUntil[struck] = Time.unscaledTime + BoomBusySeconds;
+        return struck;
+    }
+
+    // A chaos event hits this car now (meteor, bomb, fireball fuse, ...): the game's boom credited to `by`. False when
+    // the car can't be hit (finished, already mid-boom, no car).
+    public static bool StrikeNow(Vehicle vehicle, string by)
+    {
+        if (!Running || vehicle?.Car() == null || !Boomable(vehicle))
+        {
+            return false;
+        }
+        BoomedUntil[vehicle] = Time.unscaledTime + BoomBusySeconds;
+        StrikeCar(vehicle, by);
+        return true;
+    }
+
+    static bool OnScreen(Vehicle vehicle)
+    {
+        var camera = Camera.main;
+        if (camera == null)
+        {
+            return false;
+        }
+        var view = camera.WorldToViewportPoint(vehicle.Car().transform.position);
+        return view.z > 0f && view.x > 0.05f && view.x < 0.95f && view.y > 0.05f && view.y < 0.95f;
+    }
+
+    // The bolt landed: the game's own boom, credited to `by` on the feed line ("name · by storm").
+    public static void StrikeCar(Vehicle struck, string by)
+    {
+        if (!Running || struck.Car() == null || struck.HasFinished())
+        {
+            return;
+        }
         struck.Explode(by);
+        BoomNow(struck);
         // the game's feed line names only the car now (Oct 10 build ignores "by"): credit the storm on that line
         var feed = GameObject.Find("InGameCanvas/EventNotifications/EventContainer/Content/List");
         if (feed != null && feed.transform.childCount > 0)
         {
             SetFeedText(feed.transform.GetChild(feed.transform.childCount - 1), "Main/Content/Top/Text", struck.Profile().DisplayName() + " · by " + by);
         }
-        return struck;
+    }
+
+    // The game's boom waits 5 s before the blast; a strike (bolt, meteor, bomb, a fuse running out) should blow the car
+    // up the moment it lands. Cancel that fuse and run the same blast now, then the game's own 4 s stun and recovery.
+    const float BoomForce = 2900000f, BoomForceRadius = 1000f, BoomStunSeconds = 4f;   // the game's own numbers
+    static void BoomNow(Vehicle vehicle)
+    {
+        var car = vehicle.Car().GetComponent<Car>();
+        if (car == null || !car.StopBoomFuse())
+        {
+            return;   // can't reach the fuse: the game's own (late) boom still happens
+        }
+        car.StartCoroutine(BlastAndRecover(car));
+    }
+
+    static IEnumerator BlastAndRecover(Car car)
+    {
+        car.SetBoomBusy(true);
+        var body = car.GetComponent<Rigidbody>();
+        if (body != null)
+        {
+            body.AddExplosionForce(BoomForce, car.transform.position - new Vector3(0f, -0.25f, -1f), BoomForceRadius);
+        }
+        car.BoomBlast();
+        yield return new WaitForSeconds(BoomStunSeconds);
+        if (car != null)
+        {
+            car.BoomRecover();
+            car.SetBoomBusy(false);
+        }
     }
 
     public static void ResetBoomTracking() { BoomedUntil.Clear(); Slows.Clear(); _respawnsUsed.Clear(); }

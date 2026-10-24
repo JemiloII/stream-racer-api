@@ -2,7 +2,6 @@
 // what each car is doing (StateOf) and the crash tracking built on it. Obfuscated members come in through
 // GameNames.cs only; a game update that renames one makes the affected route throw and return 501.
 using HarmonyLib;
-using UnityStandardAssets.Vehicles.Car;
 
 namespace StreamRacerApi;
 
