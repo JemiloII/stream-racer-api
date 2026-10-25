@@ -38,7 +38,7 @@ static class UpdatePrompt
         _button ??= new GUIStyle(GUI.skin.button) { fontSize = 22, fixedHeight = 44 };
         float scale = Screen.height / 1080f;   // laid out for 1080p, scaled to the real screen
         GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-        var area = new Rect((Screen.width / scale - 760) / 2f, (1080 - 340) / 2f, 760, 340);
+        var area = new Rect((Screen.width / scale - 760) / 2f, (1080 - 400) / 2f, 760, 400);
         GUI.Box(area, "");
         GUI.Box(area, "");   // twice: the default box is see-through
         GUILayout.BeginArea(new Rect(area.x + 24, area.y + 20, area.width - 48, area.height - 40));
@@ -78,6 +78,11 @@ static class UpdatePrompt
 
     static string Message(bool update)
     {
+        if (Plugin.SafeMode)
+        {
+            return "The game didn't make it to the menu the last two times with Stream Racer API on, so the mod is off "
+                + "for now and your game runs untouched." + (update ? $" Version {Updates.Latest} is out and may fix it." : "");
+        }
         if (Plugin.Off && update)
         {
             return $"Stream Racer API doesn't work with this game version, so it's turned off. "
@@ -96,6 +101,11 @@ static class UpdatePrompt
         if (update && GUILayout.Button("Update now (the game restarts)", _button))
         {
             Download(Updates.Url);
+        }
+        if (Plugin.SafeMode && GUILayout.Button("Turn the mod back on (the game restarts)", _button))
+        {
+            Plugin.ResetLaunches();
+            RunAfterQuit("");
         }
         if (GUILayout.Button(Plugin.Off ? "Play without the mod" : "Not now", _button))
         {

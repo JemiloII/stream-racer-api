@@ -16,7 +16,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.47.0"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.48.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
@@ -50,6 +50,13 @@ public class Plugin : BaseUnityPlugin
         BoostKey = Config.Bind("hotkeys", "Boost", KeyCode.R, "use one of the streamer's own boosts (same as typing !boost)");
 
         Updates.Kick();
+        if (TooManyFailedLaunches())
+        {
+            Off = SafeMode = true;
+            Logger.LogError($"the game didn't reach its menu the last {FailedLaunchLimit} times with the mod on, "
+                + "so the mod is off (safe mode); the in-game window turns it back on");
+            return;
+        }
         if (!PatchGame())
         {
             return;
@@ -61,7 +68,31 @@ public class Plugin : BaseUnityPlugin
 
     // A game update renames every obfuscated method, so patches stop finding their targets. Then the mod takes back
     // whatever it did patch and stays off for this session: the game runs untouched until a mod build for it exists.
-    public static bool Off;   // this build doesn't fit the game: nothing patched, no server, only the UpdatePrompt
+    public static bool Off;        // nothing patched, no server, only the UpdatePrompt: a game mismatch or safe mode
+    public static bool SafeMode;   // off because recent launches never reached the menu
+
+    // Safe mode: every launch counts as failed until the game shows its home screen. After FailedLaunchLimit failures
+    // in a row (crash or hang while loading, the mod's fault or not) the mod stays off until the player turns it back on.
+    const int FailedLaunchLimit = 2;
+    static string LaunchFile => Path.Combine(Paths.ConfigPath, "shibiko.streamracer.launches");
+    bool _reachedMenu;
+
+    static bool TooManyFailedLaunches()
+    {
+        int failed = 0;
+        if (File.Exists(LaunchFile))
+        {
+            int.TryParse(File.ReadAllText(LaunchFile).Trim(), out failed);
+        }
+        if (failed >= FailedLaunchLimit)
+        {
+            return true;
+        }
+        File.WriteAllText(LaunchFile, (failed + 1).ToString());
+        return false;
+    }
+
+    public static void ResetLaunches() => File.WriteAllText(LaunchFile, "0");
 
     void OnGUI() => UpdatePrompt.Draw();
 
@@ -180,6 +211,11 @@ public class Plugin : BaseUnityPlugin
                 var screenState = Game.ScreenState();
                 string key = JsonConvert.SerializeObject(screenState);
                 if (key != _lastScreen) { _lastScreen = key; Emit("screen", screenState); }
+                if (!_reachedMenu && key.Contains("\"screen\":\"home\""))
+                {
+                    _reachedMenu = true;
+                    ResetLaunches();
+                }
             }
             catch { }
         }
