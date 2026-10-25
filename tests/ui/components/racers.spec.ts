@@ -1,8 +1,6 @@
 import { test, expect, card, type RaceSnapshot } from "../fixtures/test";
 import { installFakeEvents, emitEvent } from "../fixtures/fake-events";
 
-const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 // Boost pools change between the 4 Hz snapshots; the store patches them from the `boost` / `boosts` events at once.
 test.describe("Racers board · live boost counters", () => {
   test("boosts-left counters follow the boost and boosts events without waiting for the next positions snapshot", async ({ page, server }) => {
@@ -15,7 +13,7 @@ test.describe("Racers board · live boost counters", () => {
 
     const streamerCar = vehicles.find((vehicle) => vehicle.login === server.race.streamer);
     const target = streamerCar ?? (vehicles[0] as RaceSnapshot["vehicles"][number]);
-    const row = rows.filter({ has: page.locator(".lg", { hasText: new RegExp(`^${escapeRegExp(target.login)}( · sub)?$`) }) });
+    const row = page.locator(`article.board .row-r[data-login="${target.login}"]`);
     const counter = row.locator(".quick .boosts b");
     await expect(counter).toHaveText(String(target.boosts));
 
@@ -56,10 +54,12 @@ test.describe("Racers board", () => {
     await expect(rows).toHaveCount(vehicles.length);
     await expect(rows.locator(".pos")).toHaveText(vehicles.map((vehicle) => String(vehicle.place)));
     // during a live race the order can shift between the API fetch and this check: compare as sets
-    const shownLogins = (await rows.locator(".lg").allTextContents()).map((text) => text.split(" ")[0]).sort();
+    const shownLogins = (await rows.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-login")))).sort();
     expect(shownLogins).toEqual(vehicles.map((vehicle) => vehicle.login).sort());
+    // ranked: chase cam + kick only; unranked: + boom, boost and the 5 in the "⋯" menu
+    const buttons = server.settings.sendResults !== false ? 2 : 9;
     for (const row of await rows.all()) {
-      await expect(row.locator(".quick button")).toHaveCount(8);
+      await expect(row.locator(".quick button")).toHaveCount(buttons);
       await expect(row.locator(".quick .boosts b")).toHaveText(/^\d+$/);
     }
     const streamerRow = rows.filter({ has: page.locator(".you") });
@@ -75,7 +75,7 @@ test.describe("Racers board", () => {
     await search.fill("zzz-no-such-racer");
     await expect(board.locator(".board-empty")).toHaveText("No match");
     await search.fill(firstLogin);
-    await expect(board.locator(".row-r").first().locator(".lg")).toContainText(firstLogin);
+    await expect(board.locator(".row-r").first()).toHaveAttribute("data-login", firstLogin);
     await search.fill("");
     await expect(board.locator(".row-r")).toHaveCount(vehicles.length);
   });

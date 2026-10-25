@@ -135,6 +135,7 @@ static partial class Game
         var car = vehicle.Car().GetComponent<Car>();
         car.Boost(force ?? Random.Range(2.5f, 15f), seconds ?? Random.Range(1.5f, 5f));
         Plugin.Emit("boost", EventDto(vehicle));
+        Chaos.OnBoost(vehicle);
         return true;
     }
 

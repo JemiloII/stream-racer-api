@@ -72,6 +72,7 @@ static partial class Chaos
             yield break;
         }
         Announce("TORNADO", "TWISTER");
+        Siren();
         float startDistance = leader.Progress() + TornadoAhead;
         var holder = Holder("tornado");
         holder.position = TornadoSpot(startDistance, 0f);

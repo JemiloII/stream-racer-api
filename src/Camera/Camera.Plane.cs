@@ -2,7 +2,8 @@
 // the raid can be watched. It is temporary and easy to leave: any key, mouse click or scroll in the game, the "Plane
 // cam off" button (POST /camera/plane/off) or the raid ending puts the camera back exactly as it was (the game's
 // follow cam on the same car, the free cam where it stood, or the director). settings.camera.shots.plane = false
-// turns it off.
+// turns it off. The black hole borrows it (label "black hole", fixed `from`): the camera stands at one spot and
+// watches a swallowed car fly up into the hole.
 
 namespace StreamRacerApi;
 
@@ -11,6 +12,7 @@ static partial class Cam
     const float PlaneBehind = 22f, PlaneAbove = 5f, PlaneLookAhead = 30f;
 
     static Transform _plane;
+    static Vector3? _planeFrom;                 // set: stand here and look at _plane instead of riding behind it
     static CameraMode _beforePlaneMode;
     static Vehicle _beforePlaneFollow;          // the car the game's follow cam was on, if it was on one
     static bool _beforePlaneFree;
@@ -19,9 +21,12 @@ static partial class Cam
 
     public static bool OnPlane => Mode == CameraMode.Plane;
 
-    // Ride behind `plane` until EndPlaneCam. A second call just switches to another plane.
-    public static bool PlaneCam(Transform plane)
+    public static bool OnEventCam(string label) => OnPlane && Target == label;
+
+    // Ride behind `plane` (or, with `from`, watch it from there) until EndPlaneCam. A second call just switches.
+    public static bool PlaneCam(Transform plane, string label = "air raid", Vector3? from = null)
     {
+        _planeFrom = from;
         if (plane == null || !On("plane") || !Ready)
         {
             return false;
@@ -29,6 +34,7 @@ static partial class Cam
         if (OnPlane)
         {
             _plane = plane;
+            Target = label;
             return true;
         }
         RememberBeforePlane();
@@ -37,7 +43,7 @@ static partial class Cam
             return false;
         }
         _plane = plane;
-        Target = "air raid";
+        Target = label;
         _autoPausedUntil = float.MaxValue;   // the director waits
         return true;
     }
@@ -101,6 +107,12 @@ static partial class Cam
         if (_plane == null)
         {
             return false;
+        }
+        if (_planeFrom.HasValue)
+        {
+            wanted = _planeFrom.Value;
+            lookAt = _plane.position;
+            return true;
         }
         var forward = _plane.forward;
         wanted = _plane.position - forward * PlaneBehind + Vector3.up * PlaneAbove;

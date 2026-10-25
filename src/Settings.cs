@@ -11,7 +11,7 @@ static class Settings
 {
     public class Entry { public string id = ""; public string login = ""; public string displayName = null; public string color = null; public bool sub = false; public string image = null; }
     // Who gets what. Tiers: "everyone" | "follower" | "subscriber" | "off". Extra boosts stack (a subscribed follower gets both).
-    public class BotOpts { public bool autoBoost = true; }
+    public class BotOpts { public bool autoBoost = true; public bool ranked = false; }   // ranked = also auto-joins ranked races
     public class Webhook { public string @event = "race_end"; public string url = ""; public string method = "POST"; public string header = ""; public string body = ""; public bool enabled = true; }
     public static bool AutoBoosts(string login) => login != null && (!Current.botOptions.TryGetValue(login.ToLowerInvariant(), out var options) || options.autoBoost);
 
@@ -19,14 +19,16 @@ static class Settings
     public class CameraOpts { public Dictionary<string, bool> shots = DefaultShots(); }
     public static Dictionary<string, bool> DefaultShots() => Pure.ShotKeys.ToDictionary(key => key, _ => true);
 
-    // Random chaos events during a race (src/Chaos). Off while Ranked. events: name -> on (missing key = on).
+    // Random chaos events during a race (src/Chaos). inRanked = they happen in ranked races too. events: name -> on (missing key = on).
     public class ChaosOpts
     {
         public bool enabled = true;
+        public bool inRanked = true;   // false = a ranked race is plain Stream Racer
         public float minSeconds = 25f, maxSeconds = 60f;   // gap between two random events
         public Dictionary<string, bool> events = new();
         public bool giantify = true;   // a gigantified emote in chat booms cars and paints the emote (Chaos.Giantify)
-        public float umaRaceChance = 0.2f;   // chance a race is an Uma race (every car a horse girl, the Uma theme)
+        public float umaRaceChance = 0.2f;
+        public float weatherChance = 0.35f;   // chance a race gets rain, snow or fog from the start to the end   // chance a race is an Uma race (every car a horse girl, the Uma theme)
         public int giantifyBits = 100; // what Gigantify an Emote costs on this channel (Twitch's chat line doesn't say): one boom per 10
         public bool On(string name) => events == null || !events.TryGetValue(name, out var on) || on;
     }
@@ -64,6 +66,7 @@ static class Settings
         public bool chatReplies = true; // confirm chat commands in Twitch chat through the game's own connection (Game.SayInChat)
         public CameraOpts camera = new(); // director shot toggles: camera.shots.{grid,high,side,sweep,pack,front,chase,orbit,overhead,prop,finish,duel,pileup,boom}
         public Dictionary<string, string> colors = new(); // login -> hex, persisted; applied whenever they join
+        public Dictionary<string, string> umas = new();   // login -> uma chara id (!race uma <name>), used in Uma races
         public Perks perks = new();
         public ChaosOpts chaos = new();   // random events: meteors, dragon, tornado, raid, witch, magical girl, black hole
         public string twitchToken = "";    // optional: a token with moderator:read:followers (from your overlay/bot app) for follower checks
@@ -86,6 +89,7 @@ static class Settings
     public static Entry CustomBot(string login) => login == null ? null : Current.customBots.FirstOrDefault(bot => bot.login == login.ToLowerInvariant());
     public static List<string> RespawnCommands => Pure.CommandAliases(Current.respawnCommand);
     public static List<string> ShowCommands => Pure.CommandAliases(Current.showCommand);
+    public static readonly List<string> UmaCommands = new() { "!race umamusume", "!race uma" };
     public static List<string> ColorCommands => Pure.CommandAliases(Current.colorCommand);
     public static List<string> DriftCommands => Pure.CommandAliases(Current.driftCommand);
     public static Dictionary<string, bool> Shots => Current.camera?.shots;
@@ -128,6 +132,7 @@ static class Settings
         Minimap.Configure(model.minimap);
         if (model.bots != null) model.bots = model.bots.Select(login => login.Trim().ToLowerInvariant()).Where(login => login.Length > 0).Distinct().ToList();
         model.colors ??= new Dictionary<string, string>();
+        model.umas ??= new Dictionary<string, string>();
         model.perks ??= new Perks(); model.twitchToken ??= ""; model.twitchClientId ??= ""; model.botOptions ??= new Dictionary<string, BotOpts>(); model.webhooks ??= new List<Webhook>();
         model.twitchToken = Pure.CleanToken(model.twitchToken); model.twitchClientId = (model.twitchClientId ?? "").Trim();
         if (model.twitchToken != Current.twitchToken || model.twitchClientId != Current.twitchClientId) Game.ForgetFollowers(); // a new token: redo the lookups
@@ -204,6 +209,23 @@ static class Settings
         return new { ok = errors.Count == 0, errors, restarting = restart, url = Plugin.BaseUrl, config = ConfigDto() };
     }
 
+    // Ranked: the auto-join list's AI bots stay out unless botOptions[login].ranked (viewers always join), and so does
+    // anyone without a Twitch id: the game's server answers 400 to a race result with an id-less racer in it.
+    static bool JoinsThisRace(Entry entry)
+    {
+        if (!Game.RankedMode)
+        {
+            return true;
+        }
+        if (string.IsNullOrEmpty(entry.id))
+        {
+            Plugin.Log.LogWarning($"ranked: {entry.login} has no Twitch id, left out (the server would refuse the result)");
+            return false;
+        }
+        return !IsBot(entry.login)
+            || (Current.botOptions.TryGetValue(entry.login.ToLowerInvariant(), out var options) && options.ranked);
+    }
+
     public static int JoinAll() =>
-        Current.autoJoin.Count(entry => Game.Join(entry.id, entry.login.ToLowerInvariant(), entry.displayName, entry.color, entry.sub, entry.image));
+        Current.autoJoin.Where(JoinsThisRace).Count(entry => Game.Join(entry.id, entry.login.ToLowerInvariant(), entry.displayName, entry.color, entry.sub, entry.image));
 }

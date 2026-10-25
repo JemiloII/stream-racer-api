@@ -2,7 +2,7 @@
 // magical girl, a black hole). One scheduler picks an enabled event every settings.chaos.minSeconds..maxSeconds;
 // POST /chaos/:name starts one now, /chaos/clear ends them all, GET /chaos lists them. Every event lives in its own
 // Chaos.<Event>.cs as a coroutine on the chaos root, so destroying that root (race end, new lobby, clear) stops them
-// all at once. Everything is built from Unity primitives and code (no asset bundles). Ranked blocks it all.
+// all at once. Everything is built from Unity primitives and code (no asset bundles). Ranked blocks it unless settings.chaos.inRanked.
 using System.Collections;
 using System.Collections.Specialized;
 
@@ -70,6 +70,10 @@ static partial class Chaos
                 error = "need /chaos/<name>|clear",
                 events = Names,
             };
+        }
+        if (name.StartsWith("uma"))
+        {
+            UmaOnly = query["only"];   // dev aid: ?only=<chara id> puts every car in that one girl
         }
         if (name.StartsWith("uma") && query["look"] != null)
         {
@@ -175,20 +179,66 @@ static partial class Chaos
 
     // ---- scheduler ----
 
+    // How often each event is drawn next to the others (1 = normal). Meteors are rarer, a little less so on night
+    // maps; in October (Halloween) the witch comes three times as often.
+    const float MeteorOdds = 0.4f, MeteorNightOdds = 0.6f, WitchHalloweenOdds = 3f;
+
+    static float OddsOf(string name) => name switch
+    {
+        "meteors" => VoidIsNight(VoidSky.Capture()) ? MeteorNightOdds : MeteorOdds,
+        "witch" when System.DateTime.Now.Month == 10 => WitchHalloweenOdds,
+        _ => 1f,
+    };
+
+    static string PickEvent(List<string> pool)
+    {
+        var odds = pool.Select(OddsOf).ToList();
+        float roll = Random.value * odds.Sum();
+        for (int index = 0; index < pool.Count; index++)
+        {
+            roll -= odds[index];
+            if (roll < 0f)
+            {
+                return pool[index];
+            }
+        }
+        return pool[pool.Count - 1];
+    }
+
+    // Once per race, at the start: rain, snow or fog for the whole race (settings.chaos.weatherChance).
+    static bool _weatherRolled;
+    static readonly WeatherKind[] RandomWeather = { WeatherKind.Rain, WeatherKind.Snow, WeatherKind.Fog };
+
+    static void MaybeWeather()
+    {
+        if (_weatherRolled)
+        {
+            return;
+        }
+        _weatherRolled = true;
+        var options = Settings.Current.chaos;
+        if (options.enabled && Weather.Current == WeatherKind.Clear && Random.value < options.weatherChance)
+        {
+            Weather.Start(RandomWeather[Random.Range(0, RandomWeather.Length)], 0f);
+        }
+    }
+
     public static void Tick()
     {
         if (!Game.Running)
         {
             _umaRolled = false;
+            _weatherRolled = false;
             return;
         }
-        if (!Settings.Current.sendResults)
+        if (Game.ChaosAllowed)
         {
             Guard("uma", MaybeUmaRace);
+            Guard("weather", MaybeWeather);
         }
         Guard("tick", TickEvents);
         var options = Settings.Current.chaos;
-        if (!options.enabled || Settings.Current.sendResults)   // Ranked keeps to the game's own racing
+        if (!options.enabled || !Game.ChaosAllowed)
         {
             _nextEvent = 0f;
             return;
@@ -206,14 +256,13 @@ static partial class Chaos
         var pool = Names.Where(name => !name.StartsWith("uma") && options.On(name) && !_active.Contains(name)).ToList();
         if (pool.Count > 0)
         {
-            Start(pool[Random.Range(0, pool.Count)]);
+            Start(PickEvent(pool));
         }
     }
 
     // Per-frame work of state that outlives an event's own coroutine (burning cars, holes, costumes, the black hole's
     // pull), and its reset. Each lives in its event's file; a missing one compiles away (partial methods).
     static partial void TickFire();
-    static partial void TickHoles();
     static partial void TickCostumes();
     static partial void TickTornado();
     static partial void TickBlackHole();
@@ -226,7 +275,6 @@ static partial class Chaos
     static void TickEvents()
     {
         TickFire();
-        TickHoles();
         TickCostumes();
         TickTornado();
         TickBlackHole();

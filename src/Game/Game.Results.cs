@@ -10,11 +10,17 @@ static partial class Game
 {
     // Ranked = results go to the game's servers, so only the game's own racing may decide them (Pure.RankedBlocks).
     public static bool RankedMode => Settings.Current.sendResults;
+    // Ranked + chaos: the random events (and giantify booms) still happen; respawns and extra boosts stay refused.
+    public static bool ChaosInRanked => Settings.Current.chaos.inRanked;
+    public static bool ChaosAllowed => !RankedMode || ChaosInRanked;
 
     // Ranked switched on: anything of ours still running stops now.
     public static void EnterRanked()
     {
-        Weather.EndOfRace();   // weather + every laid surface
+        if (!ChaosInRanked)
+        {
+            Weather.EndOfRace();   // weather, surfaces and chaos; chaos ranked keeps them (random weather is chaos)
+        }
         StopDrifts();
         Slows.Clear();
     }

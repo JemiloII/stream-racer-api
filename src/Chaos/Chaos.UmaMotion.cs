@@ -264,6 +264,8 @@ static partial class Chaos
     // its posed rotation; the tip keeps its momentum minus drag, sags, gets a gusting headwind from her speed, is
     // pulled gently toward the posed tip, pushed out of her body, kept within SpringMaxSwing of the pose and at its
     // length; the bone then turns to point at it. Clips never move these bones, so nothing piles up.
+    const float SpringTunedFps = 60f;
+
     static void StepSprings(List<Spring> springs, float speed)
     {
         float step = Mathf.Min(Time.deltaTime, 0.05f);
@@ -296,12 +298,13 @@ static partial class Chaos
             return;
         }
         var profile = spring.Profile;
-        var velocity = (spring.Tip - spring.PreviousTip) * (1f - profile.Drag);
+        float frames = step * SpringTunedFps;   // Drag / Stiffness were tuned per 60 fps frame: the same per second at any fps
+        var velocity = (spring.Tip - spring.PreviousTip) * Mathf.Pow(1f - profile.Drag, frames);
         velocity.x *= profile.Sideways;   // her own x = left/right: a tail that doesn't whip from side to side
         spring.PreviousTip = spring.Tip;
         var down = root.InverseTransformDirection(Vector3.down);
         spring.Tip += velocity + (down * SpringGravity + wind * profile.Wind) * (step * step);
-        spring.Tip = Vector3.Lerp(spring.Tip, posed, profile.Stiffness);
+        spring.Tip = Vector3.Lerp(spring.Tip, posed, 1f - Mathf.Pow(1f - profile.Stiffness, frames));
         spring.Tip = OutOfBody(spring, spring.Tip);
         var swing = Vector3.RotateTowards(posed - origin, spring.Tip - origin, profile.MaxSwing * Mathf.Deg2Rad, 0f);
         spring.Tip = origin + swing.normalized * spring.Length;

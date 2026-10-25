@@ -40,6 +40,119 @@ static class Routes
         if (method == "GET" && root == "weather") return Weather.Dto();
         if (method == "GET" && root == "chaos") return Chaos.Dto();
         if (method == "GET" && root == "motion") return Cam.MotionDto();   // physics rate vs frame rate: why a shot might look rough
+        if (method == "POST" && root == "find" && target == "umaprefab") // dev aid: the real Uma prefabs beside a car
+        {
+            var car = Game.Find(query["near"] ?? "")?.Car();
+            if (car == null)
+            {
+                status = 404;
+                return new { error = "need ?near=<racing login>" };
+            }
+            string folder = System.IO.Path.Combine(BepInEx.Paths.PluginPath, "StreamRacerApi.uma", "bundles");
+            var bundles = new List<AssetBundle>();
+            foreach (var file in System.IO.Directory.GetFiles(folder, "*.bundle"))
+            {
+                var bundle = AssetBundle.LoadFromFile(file);
+                if (bundle != null)
+                {
+                    bundles.Add(bundle);
+                }
+            }
+            // the globals the Uma game (and UmaViewer, UmaViewerGlobalShader.cs) feeds its character shaders
+            Shader.SetGlobalColor("_GlobalToonColor", new Color(1f, 1f, 1f, 0f));
+            Shader.SetGlobalColor("_GlobalRimColor", new Color(1f, 1f, 1f, 0f));
+            Shader.SetGlobalColor("_Global_LightmapColor", Color.white);
+            Shader.SetGlobalColor("_Global_LightmapDensityAddColor", Color.clear);
+            Shader.SetGlobalColor("_Global_LightmapModulateColor", Color.white);
+            Shader.SetGlobalFloat("_Global_MaxDensity", 1f);
+            Shader.SetGlobalFloat("_Global_MaxHeight", 10f);
+            Shader.SetGlobalFloat("_GlobalOutlineOffset", 1f);
+            Shader.SetGlobalFloat("_GlobalOutlineWidth", 1f);
+            Shader.SetGlobalFloat("_GlobalCameraFov", 0.1f);
+            Shader.SetGlobalVectorArray("_HighParam1", new List<Vector4> { new(0f, 0f, 0f, 1f), new(0f, 0f, 0f, 1f), Vector4.zero });
+            Shader.SetGlobalVectorArray("_HighParam2", new List<Vector4> { new(0f, 0f, 0f, 1f), new(0f, 0f, 0f, 1f) });
+            Shader.SetGlobalVectorArray("_MainParam", new List<Vector4> { Vector4.zero, Vector4.zero });
+            Shader.SetGlobalFloatArray("_DirtRate", new List<float> { 0f, 0f, 0f });
+            Shader.SetGlobalColor("_AmbientColor", Color.white * 0.5f);
+            var spawned = new List<string>();
+            var holder = new GameObject("sr-test-uma");
+            holder.transform.position = car.transform.position + car.transform.forward * 4f;
+            holder.transform.rotation = Quaternion.LookRotation(-car.transform.forward);
+            holder.transform.localScale = Vector3.one * 1.6f;
+            foreach (var bundle in bundles)
+            {
+                foreach (var prefab in bundle.LoadAllAssets<GameObject>().Where(asset => asset.name.StartsWith("pfb_")))
+                {
+                    Object.Instantiate(prefab, holder.transform, false);
+                    spawned.Add(prefab.name);
+                }
+            }
+            return new
+            {
+                bundles = bundles.Count,
+                spawned,
+                materials = holder.GetComponentsInChildren<Renderer>(true)
+                    .SelectMany(renderer => renderer.sharedMaterials)
+                    .Where(material => material != null)
+                    .Select(material => material.name + " / " + material.shader.name + (material.shader.isSupported ? "" : " (unsupported)"))
+                    .Distinct()
+                    .ToList(),
+            };
+        }
+        if (method == "POST" && root == "find" && target == "bundle") // dev aid: try loading an asset bundle, list its shaders
+        {
+            string file = System.IO.Path.Combine(BepInEx.Paths.PluginPath, "StreamRacerApi.uma", query["file"] ?? "shaders.bundle");
+            var bundle = AssetBundle.LoadFromFile(file);
+            if (bundle == null)
+            {
+                status = 422;
+                return new { error = "Unity refused the bundle (see the BepInEx log)", file };
+            }
+            var shaders = bundle.LoadAllAssets<Shader>();
+            var result = new
+            {
+                file,
+                shaders = shaders.Select(shader => new
+                {
+                    name = shader.name,
+                    supported = shader.isSupported,
+                }).ToList(),
+            };
+            bundle.Unload(false);
+            return result;
+        }
+        if (method == "GET" && root == "find" && target == "umas") // dev aid: every girl's renderers, layers, shaders
+        {
+            return Object.FindObjectsOfType<SkinnedMeshRenderer>()
+                .Where(renderer => renderer.name.StartsWith("M_") && renderer.gameObject.activeInHierarchy)
+                .Select(renderer => new
+                {
+                    path = renderer.transform.parent != null ? renderer.transform.parent.name + "/" + renderer.name : renderer.name,
+                    layer = renderer.gameObject.layer,
+                    active = renderer.gameObject.activeInHierarchy,
+                    probes = renderer.lightProbeUsage.ToString(),
+                    shaders = renderer.sharedMaterials.Where(material => material != null).Select(material => material.shader.name).ToList(),
+                })
+                .Take(60)
+                .ToList();
+        }
+        if (method == "GET" && root == "find" && target == "lights") // dev aid: the scene's lights and ambient
+        {
+            return new
+            {
+                ambient = RenderSettings.ambientLight.ToString(),
+                ambientMode = RenderSettings.ambientMode.ToString(),
+                sun = RenderSettings.sun != null ? RenderSettings.sun.name : null,
+                lights = Object.FindObjectsOfType<Light>().Select(light => new
+                {
+                    name = light.name,
+                    type = light.type.ToString(),
+                    on = light.isActiveAndEnabled,
+                    color = light.color.ToString(),
+                    intensity = light.intensity,
+                }).ToList(),
+            };
+        }
         if (method == "GET" && root == "find" && target == "shaders") // dev aid: every shader loaded (looking for a toon one)
         {
             return Resources.FindObjectsOfTypeAll<Shader>()
@@ -149,7 +262,7 @@ static class Routes
             return Settings.WithConfig();
         }
         if (method != "POST") { status = 404; return new { error = "not found" }; }
-        if (Game.RankedMode && Pure.RankedBlocks(root, target, action))
+        if (Game.RankedMode && Pure.RankedBlocks(root, target, action, Game.ChaosInRanked))
         {
             status = 403;
             return new { error = "ranked race: the mod's extras are off (turn Ranked off to use them)", ranked = true };

@@ -26,11 +26,26 @@ static class Patches
 
     // Every boom, whether from bits, the API, or anything else, goes through the vehicle's explode method.
     [HarmonyPostfix, HarmonyPatch(typeof(Vehicle), GameNames.VehicleExplode, typeof(string))]   // Explode() just calls Explode(null)
-    static void OnBoom(Vehicle __instance) { Plugin.Emit("boom", Game.EventDto(__instance)); Cam.OnBoom(__instance); }
+    // __0 = Explode's `by`: null for the game's own booms (bits, API, chat); our chaos names its cause.
+    static void OnBoom(Vehicle __instance, string __0)
+    {
+        var payload = Newtonsoft.Json.Linq.JObject.FromObject(Game.EventDto(__instance));
+        payload["by"] = __0;
+        Plugin.Emit("boom", payload);
+        Cam.OnBoom(__instance);
+    }
 
     // Pool boosts: chat !boost, the hotkey, /boost/me, bot auto-boost.
     [HarmonyPostfix, HarmonyPatch(typeof(Vehicle), GameNames.VehicleUseBoost)]
-    static void OnPoolBoost(Vehicle __instance, bool __result) { if (__result) Plugin.Emit("boost", Game.EventDto(__instance)); }
+    static void OnPoolBoost(Vehicle __instance, bool __result)
+    {
+        if (!__result)
+        {
+            return;
+        }
+        Plugin.Emit("boost", Game.EventDto(__instance));
+        Chaos.OnBoost(__instance);   // in an Uma race: the girl's "Boost" skill pop-up
+    }
 
     [HarmonyPostfix, HarmonyPatch(typeof(GameController), GameNames.StartCurrentGame)]
     static void OnStart()

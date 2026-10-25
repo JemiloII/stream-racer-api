@@ -30,7 +30,9 @@ export default function BotsPage() {
   const joinEntryOf = (bot) => ({ id: bot.id || "", login: bot.login, displayName: bot.displayName, color: bot.color || null, sub: false, image: bot.kind === "custom" ? bot.image : null, autoBoost: autoBoostOf(bot.login) });
 
   const toggleAutoJoin = (bot) => { const list = settings.autoJoin || []; saveSettings({ autoJoin: autoJoinLogins.has(bot.login) ? list.filter((entry) => entry.login !== bot.login) : [...list, joinEntryOf(bot)] }); };
-  const toggleAutoBoost = (bot) => saveSettings({ botOptions: { ...botOptions, [bot.login]: { autoBoost: !autoBoostOf(bot.login) } } });
+  const toggleAutoBoost = (bot) => saveSettings({ botOptions: { ...botOptions, [bot.login]: { ...botOptions[bot.login], autoBoost: !autoBoostOf(bot.login) } } });
+  const rankedOf = (login) => botOptions[login]?.ranked === true;
+  const toggleRanked = (bot) => saveSettings({ botOptions: { ...botOptions, [bot.login]: { ...botOptions[bot.login], ranked: !rankedOf(bot.login) } } });
   const removeBot = (bot) => saveSettings({
     bots: bot.kind === "twitch" ? twitchLogins.filter((login) => login !== bot.login) : twitchLogins,
     customBots: bot.kind === "custom" ? customBots.filter((customBot) => customBot.login !== bot.login) : customBots,
@@ -70,7 +72,7 @@ export default function BotsPage() {
           <${Grid}>
             ${roster.map((bot) => html`
               <${BotCard} key=${bot.login} bot=${bot} picked=${pickedLogins.has(bot.login)} inLobby=${lobbyLogins.has(bot.login)} racing=${snapshot.running}
-                autoJoin=${autoJoinLogins.has(bot.login)} autoBoost=${autoBoostOf(bot.login)}
+                autoJoin=${autoJoinLogins.has(bot.login)} autoBoost=${autoBoostOf(bot.login)} ranked=${rankedOf(bot.login)} onToggleRanked=${toggleRanked}
                 onTogglePick=${togglePick} onToggleAutoJoin=${toggleAutoJoin} onToggleAutoBoost=${toggleAutoBoost} onRemove=${removeBot} onReplacePicture=${replacePicture} onJoin=${joinNow} />`)}
           <//>`
         : html`<${Empty} text="Roster is empty" />`}

@@ -31,6 +31,7 @@ static partial class Chaos
     static string UmaFolder => Path.Combine(BepInEx.Paths.PluginPath, "StreamRacerApi.uma");
     static readonly Dictionary<string, UmaTemplate> _umaTemplates = new();
     static bool _umaWarned, _umaRolled;
+    public static string UmaOnly;   // dev aid (/chaos/uma?only=1001): every car this girl
 
     // One exported uma, built once (hidden) and copied for every car that becomes her.
     class UmaTemplate
@@ -40,6 +41,8 @@ static partial class Chaos
         public GameObject Model;
         public float HeightCm;
         public int RunningType;               // chara_data.race_running_type: her running form (1-3)
+        public bool Real;                     // in the game's own materials (Chaos.UmaLook), not the baked look
+        public string GymSkin;                // gym uniform: her skin texture stem (tex_bdy0001_00_00_<skin>_<bust>_0<socks>)
         public int Style;                     // 1 front runner, 2 pace chaser, 3 late surger, 4 end closer
     }
 
@@ -110,18 +113,22 @@ static partial class Chaos
     static IEnumerator UmaRaceIn(bool gym)
     {
         var ids = UmaKeys(gym);
+        string only = UmaOnly == null ? null : UmaOnly + (gym ? "_gym" : "");
+        if (only != null && ids.Contains(only))
+        {
+            ids = new List<string> { only };
+        }
         if (ids.Count == 0)
         {
             WarnUma("no exported umas in " + UmaFolder + " (run scripts/uma_export.py" + (gym ? " gym" : "") + ")");
             yield break;
         }
         Announce(gym ? "UMA RACE · GYM CLOTHES" : "UMA RACE", "UMA");
-        var shuffled = ids.OrderBy(_ => Random.value).ToList();
-        int next = 0;
+        _umaDeck = ids.OrderBy(_ => Random.value).ToList();
+        _umaDealt = 0;
         foreach (var vehicle in Racers())
         {
-            Dress(vehicle, "uma:" + shuffled[next % shuffled.Count], UmaRaceSeconds);
-            next++;
+            DressAsUma(vehicle);
             yield return null;   // one build a frame: no hitch on a full grid
         }
         Spawn(PlayUmaMusic());
@@ -130,13 +137,104 @@ static partial class Chaos
         {
             Guard("uma pace", PaceUmas);
             Guard("uma rain", MuddyUmasWhenRaining);
+            Guard("uma light", BalanceUmaLight);
             yield return new WaitForSeconds(UmaPaceEvery);
         }
     }
 
     // Every horse girl runs her strategy: a top-speed multiplier for the next stretch (Game.Speed, refreshed).
+    static List<string> _umaDeck = new();
+    static int _umaDealt;
+
+    // Her own pick (!race uma) when that girl is exported in this outfit, else the next girl off the shuffled deck
+    // (the deck repeats once every car has one).
+    static void DressAsUma(Vehicle vehicle)
+    {
+        if (_umaDeck.Count == 0)
+        {
+            return;
+        }
+        string gym = _umaDeck[0].EndsWith("_gym") ? "_gym" : "";
+        string picked = Settings.Current.umas.TryGetValue(Game.Login(vehicle) ?? "", out var id) ? id + gym : null;
+        if (picked != null && File.Exists(Path.Combine(UmaFolder, picked, "model.json")))
+        {
+            Dress(vehicle, "uma:" + picked, UmaRaceSeconds);
+            return;
+        }
+        Dress(vehicle, "uma:" + _umaDeck[_umaDealt % _umaDeck.Count], UmaRaceSeconds);
+        _umaDealt++;
+    }
+
+    // ---- !race uma <name> ----
+
+    static Dictionary<string, string> _umaNames;   // chara id -> name, read once from the exports
+
+    // The names of the exported girls: each racewear model.json starts with {"id": .., "name": ..}, so only its head is read.
+    static Dictionary<string, string> UmaNames()
+    {
+        if (_umaNames != null && _umaNames.Count > 0)
+        {
+            return _umaNames;
+        }
+        _umaNames = new Dictionary<string, string>();
+        foreach (var key in UmaKeys())
+        {
+            using var reader = new StreamReader(Path.Combine(UmaFolder, key, "model.json"));
+            var head = new char[512];
+            int read = reader.Read(head, 0, head.Length);
+            var name = System.Text.RegularExpressions.Regex.Match(new string(head, 0, read), @"""name""\s*:\s*""([^""]+)""");
+            if (name.Success)
+            {
+                _umaNames[key] = name.Groups[1].Value;
+            }
+        }
+        return _umaNames;
+    }
+
+    // A viewer picks the girl their car becomes in Uma races; saved like their colour (settings.umas).
+    public static void PickUma(string login, string displayName, string query) => Guard("uma pick", () =>
+    {
+        var names = UmaNames();
+        if (query.Length == 0)
+        {
+            string current = Settings.Current.umas.TryGetValue(login, out var mine) && names.TryGetValue(mine, out var name)
+                ? "you're " + name + ". "
+                : "";
+            Game.ReplyInChat("@" + displayName + " " + current + "Pick your Umamusume: !race uma <name>, e.g. !race uma Gold Ship");
+            return;
+        }
+        string id = Pure.MatchUma(query, names, out var close);
+        if (id == null)
+        {
+            Game.ReplyInChat("@" + displayName + (close.Count > 0
+                ? " which one? " + string.Join(", ", close)
+                : " no Umamusume called \"" + query + "\" here"));
+            return;
+        }
+        Settings.Current.umas[login] = id;
+        Settings.Persist();
+        Plugin.Emit("uma", new
+        {
+            login,
+            displayName,
+            uma = id,
+            name = names[id],
+        });
+        Game.ReplyInChat("@" + displayName + " you'll race as " + names[id] + " in Uma races");
+    });
+
+    // A car that wasn't on the road when the race turned Uma (spawned late) gets her girl now.
+    static void DressLateCars()
+    {
+        foreach (var vehicle in Racers().Where(vehicle => !_costumes.ContainsKey(vehicle)))
+        {
+            DressAsUma(vehicle);
+        }
+    }
+
     static void PaceUmas()
     {
+        DressLateCars();
         foreach (var costume in _costumes.Values.ToList())
         {
             if (!costume.Kind.StartsWith("uma:"))
@@ -186,18 +284,41 @@ static partial class Chaos
         float scale = uma.lossyScale.y;
         var spot = Ground(line + side * DanceSide - along * (DanceBefore + place * DanceSpacing * scale / 1.6f));
         StandingPose(uma, costume.Kind.Substring(4));
-        costume.Outfit.SetParent(Root.transform, true);
-        costume.Outfit.position = spot;
-        costume.Outfit.rotation = Quaternion.LookRotation(-side);   // facing the road and the cars still coming
+        MoveCarTo(costume, spot, Quaternion.LookRotation(-side));   // facing the road and the cars still coming
         costume.Dancing = true;
         costume.Until = float.MaxValue;
         var springs = Springs(uma);
         var dance = Dance(uma);
+        var face = FaceFeeder(uma.gameObject);
         costume.Animate = (seconds, speed) =>
         {
             dance(seconds, speed);
             StepSprings(springs, 0f);
+            face();
         };
+    }
+
+    // The (hidden) car goes with her, held still, so the game's follow camera on her shows her dancing; she stays on
+    // it. Without a car (gone already) she is moved on her own.
+    static void MoveCarTo(Costume costume, Vector3 spot, Quaternion facing)
+    {
+        var car = costume.Vehicle.Car();
+        if (car == null || costume.Outfit.parent != car.transform)
+        {
+            costume.Outfit.SetParent(Root.transform, true);
+            costume.Outfit.SetPositionAndRotation(spot, facing);
+            return;
+        }
+        var body = car.GetComponent<Rigidbody>();
+        if (body != null)
+        {
+            body.velocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            body.isKinematic = true;
+        }
+        var outfitFromCar = Quaternion.Inverse(car.transform.rotation) * costume.Outfit.rotation;
+        car.transform.rotation = facing * Quaternion.Inverse(outfitFromCar);
+        car.transform.position += spot - costume.Outfit.position;   // her feet (the outfit) land on the spot
     }
 
     // Every bone back to how her model stands (the template's pose), so she doesn't dance frozen mid-stride.
@@ -313,7 +434,14 @@ static partial class Chaos
         var uma = Object.Instantiate(template.Model, model, false);
         uma.name = "uma";
         uma.SetActive(true);
-        if (key.EndsWith("_gym"))
+        NeutralAmbient(uma);
+        OnUmaLayer(uma);
+        System.Action face = null;
+        if (template.Real)
+        {
+            face = RealLookFor(uma, template.GymSkin);
+        }
+        else if (key.EndsWith("_gym"))
         {
             PaintGymColours(uma);
         }
@@ -325,13 +453,21 @@ static partial class Chaos
         uma.transform.localRotation = Quaternion.identity;
         float height = UmaHeight * (template.HeightCm > 0f ? template.HeightCm / 160f : 1f);
         uma.transform.localScale = Vector3.one * (height / 1.6f / Mathf.Max(0.01f, model.lossyScale.y));
-        var clip = PlayClip(uma.transform, ClipFor(template.RunningType, "run"));
-        if (clip != null)
+        var run = PlayClip(uma.transform, ClipFor(template.RunningType, "run"));
+        if (run == null)
         {
-            return clip;
+            var form = GallopForms.TryGetValue(template.RunningType, out var known) ? known : GallopForms[1];
+            run = Gallop(uma.transform, form);
         }
-        var form = GallopForms.TryGetValue(template.RunningType, out var known) ? known : GallopForms[1];
-        return Gallop(uma.transform, form);
+        if (face == null)
+        {
+            return run;
+        }
+        return (seconds, speed) =>
+        {
+            run(seconds, speed);
+            face();
+        };
     }
 
     static UmaTemplate UmaTemplateFor(string key)
@@ -364,9 +500,10 @@ static partial class Chaos
         Object.DontDestroyOnLoad(root);   // templates outlive races; copies live on the cars
         var bones = BuildBones(root.transform, (JArray)info["bones"]);
         var textures = new Dictionary<string, Texture2D>();
+        bool real = LoadRealLook(info, key.EndsWith("_gym"));
         foreach (JObject mesh in (JArray)info["meshes"])
         {
-            BuildUmaMesh(mesh, blob, bones, folder, textures);
+            BuildUmaMesh(mesh, blob, bones, folder, textures, real);
         }
         return new UmaTemplate
         {
@@ -376,7 +513,18 @@ static partial class Chaos
             HeightCm = (float?)info["heightCm"] ?? 160f,
             RunningType = (int?)info["runningType"] ?? 1,
             Style = (int?)info["style"] ?? 2,
+            Real = real,
+            GymSkin = key.EndsWith("_gym") ? GymSkinOf(info) : null,
         };
+    }
+
+    // The body mesh's skin slot (1) names her skin texture: its stem without _diff.
+    static string GymSkinOf(JObject info)
+    {
+        var body = ((JArray)info["meshes"]).FirstOrDefault() as JObject;
+        var submeshes = body?["submeshes"] as JArray;
+        string texture = submeshes != null && submeshes.Count > 1 ? (string)submeshes[1]["texture"] : null;
+        return texture != null && texture.EndsWith("_diff") ? texture.Substring(0, texture.Length - "_diff".Length) : null;
     }
 
     static Transform[] BuildBones(Transform root, JArray list)
@@ -404,7 +552,7 @@ static partial class Chaos
     static Vector3 ReadVector(JArray values) => new((float)values[0], (float)values[1], (float)values[2]);
 
     static void BuildUmaMesh(JObject info, byte[] blob, Transform[] bones, string folder,
-        Dictionary<string, Texture2D> textures)
+        Dictionary<string, Texture2D> textures, bool real)
     {
         int count = (int)info["vertexCount"];
         var mesh = new Mesh
@@ -429,13 +577,18 @@ static partial class Chaos
         for (int i = 0; i < submeshes.Count; i++)
         {
             var submesh = (JObject)submeshes[i];
-            bool bib = ((string)submesh["texture"] ?? "").StartsWith("gym:zekken");   // the number bib clips: left off
-            mesh.SetTriangles(bib ? new int[0] : Ints(blob, (int)submesh["indices"], (int)submesh["indexCount"]), i);
-            materials[i] = (string)info["blend"] == "multiply"
-                ? MultiplyMaterial(UmaTexture(folder, (string)submesh["texture"], textures))
-                : UmaMaterial(folder, (string)submesh["texture"], textures);
+            mesh.SetTriangles(Ints(blob, (int)submesh["indices"], (int)submesh["indexCount"]), i);
+            var own = real ? RealMaterial((string)submesh["material"]) : null;
+            if (own != null && own.name.StartsWith("mtl_tail"))
+            {
+                own = TailMaterial(own, (string)submesh["texture"]);
+            }
+            materials[i] = own != null ? own
+                : (string)info["blend"] == "multiply"
+                    ? MultiplyMaterial(UmaTexture(folder, (string)submesh["texture"], textures))
+                    : UmaMaterial(folder, (string)submesh["texture"], textures);
         }
-        bool face = IsFacePart(mesh.name);
+        bool face = IsFacePart(mesh.name) && !real;   // the real face shader lights the face itself
         if (face && mesh.vertexCount > 0)
         {
             FaceLighting(mesh);
@@ -454,7 +607,10 @@ static partial class Chaos
             skinned.sharedMesh = mesh;
             skinned.sharedMaterials = materials;
             skinned.updateWhenOffscreen = true;
-            AddOutline(skinned, mesh);
+            if (!real)
+            {
+                AddOutline(skinned, mesh);   // the real toon shaders draw their own outline
+            }
         }
         else
         {
@@ -623,7 +779,7 @@ static partial class Chaos
         if (!textures.TryGetValue(texture, out var loaded))
         {
             loaded = new Texture2D(2, 2, TextureFormat.RGBA32, true);
-            string file = GymTextureName(texture, 0);
+            string file = GymTextureName(texture, texture.StartsWith("gym:zekken") ? WhiteBib : 0);
             loaded.name = file;
             string path = file != texture
                 ? Path.Combine(UmaFolder, "gym", file + ".png")
@@ -654,10 +810,14 @@ static partial class Chaos
 
     static readonly Dictionary<string, Material> _gymColours = new();
 
+    // The number bib is the shirt's own front and back panel (the shirt has holes there), so it stays, in white and
+    // without its number, reading as part of the gym shirt.
+    const int WhiteBib = 4;
+
     // Like the game: every girl in gym clothes gets a random gate-frame colour (8) and number-bib colour (5).
     static void PaintGymColours(GameObject uma)
     {
-        int frame = Random.Range(0, 8), bib = Random.Range(0, 5);
+        int frame = Random.Range(0, 8), bib = WhiteBib;
         foreach (var renderer in uma.GetComponentsInChildren<SkinnedMeshRenderer>(true))
         {
             var materials = renderer.sharedMaterials;
@@ -726,6 +886,8 @@ static partial class Chaos
             return;
         }
         _umaMuddy = true;
+        SetDirt(1f);   // the real shaders' own wet / dirty look
+        OnClear(() => SetDirt(0f));
         foreach (var costume in _costumes.Values.Where(costume => costume.Kind.StartsWith("uma:") && costume.Outfit != null))
         {
             Muddy(costume.Outfit.gameObject);

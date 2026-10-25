@@ -1,4 +1,5 @@
 // The live /events viewer on the API page: its own EventSource (opened on demand), the last 60 events, a name filter.
+// (Not named EventLog.js: ad blockers block "eventlog" URLs, and one failed module blanks the whole panel.)
 import { useState, useRef, useEffect } from "react";
 import { html } from "../../lib/html.js";
 import { withToken } from "../../lib/api.js";
@@ -7,7 +8,7 @@ const KEEP = 60;   // entries remembered
 const SHOWN = 12;  // entries drawn
 const DATA_PREVIEW = 300; // chars of payload per line
 
-export default function EventLog({ events }) {
+export default function LiveFeed({ events }) {
   const [entries, setEntries] = useState([]);
   const [listening, setListening] = useState(false);
   const [filter, setFilter] = useState("");

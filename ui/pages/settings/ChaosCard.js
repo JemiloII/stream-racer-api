@@ -18,12 +18,14 @@ export const CHAOS_EVENTS = [
 
 const CHAOS_DEFAULTS = {
   enabled: true,
+  inRanked: true,
   minSeconds: 25,
   maxSeconds: 60,
   events: {},
   giantify: true,
   giantifyBits: 100,
   umaRaceChance: 0.2,
+  weatherChance: 0.35,
 };
 
 export default function ChaosCard() {
@@ -35,10 +37,14 @@ export default function ChaosCard() {
   return html`
     <article>
       <header>Chaos events</header>
-      ${ranked ? html`<p class="hint">Ranked is on, so no chaos happens. Turn Ranked off (Race results) to let it loose.</p>` : null}
+      ${ranked && !chaos.inRanked ? html`<p class="hint">Ranked is on and chaos is off for ranked races, so no chaos happens.</p>` : null}
       <label class="switch-row">
         <input type="checkbox" role="switch" checked=${chaos.enabled} onChange=${(event) => save("enabled", event.target.checked)} />
         <span>Random events happen on their own during a race</span>
+      </label>
+      <label class="switch-row">
+        <input type="checkbox" role="switch" checked=${chaos.inRanked} onChange=${(event) => save("inRanked", event.target.checked)} />
+        <span>Chaos in ranked races too <small class="hint">respawns and extra boosts stay off in ranked either way</small></span>
       </label>
       <div class="ovgrid">
         <${NumberField} values=${chaos} name="minSeconds" label="Every (shortest, seconds)" step="1" onChange=${save} />
@@ -49,6 +55,7 @@ export default function ChaosCard() {
           <input type="checkbox" role="switch" checked=${chaos.events[name] !== false} onChange=${(event) => setEvent(name, event.target.checked)} />
           <span>${label} <small class="hint">${hint}</small></span>
         </label>`)}
+      <${NumberField} values=${chaos} name="weatherChance" label="Chance a race has rain, snow or fog the whole way (0 to 1)" step="0.05" onChange=${save} />
       <${NumberField} values=${chaos} name="umaRaceChance" label="Chance a race is an Uma race (0 to 1)" step="0.05" onChange=${save} />
       <label class="switch-row">
         <input type="checkbox" role="switch" checked=${chaos.giantify} onChange=${(event) => save("giantify", event.target.checked)} />

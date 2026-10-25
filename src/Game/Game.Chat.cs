@@ -33,6 +33,7 @@ static partial class Game
         catch (System.Exception error) { Plugin.Log.LogWarning("chat send failed: " + error.Message); return false; }
     }
     static void Reply(string text) { if (Settings.Current.chatReplies) SayInChat(text); }
+    public static void ReplyInChat(string text) => Reply(text);
 
     static void RankedRefusal(string login, string displayName, string command)
     {
@@ -99,6 +100,12 @@ static partial class Game
                 return;
             }
             OnDriftCommand(login, displayName);   // Game.Drift
+            return;
+        }
+        string umaPick = Pure.CommandArg(message, Settings.UmaCommands);
+        if (umaPick != null)
+        {
+            Chaos.PickUma(login, displayName, umaPick);   // cosmetic, so ranked keeps it
             return;
         }
         if (!Settings.Current.colorCommandEnabled) return;

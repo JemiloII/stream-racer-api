@@ -47,6 +47,7 @@ static partial class Chaos
             yield break;
         }
         Announce("AIR RAID", "RAID");
+        Siren();
         var squadron = Holder("air-raid");
         float distance = racers.Min(vehicle => vehicle.Progress()) - RaidStartBehind;
         var heading = RoadDirectionAt(distance);

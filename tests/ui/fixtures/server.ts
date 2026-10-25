@@ -14,6 +14,7 @@ export interface ServerSettings {
   webhooks: Webhook[];
   colorCommand: string;
   respawnCommand: string;
+  sendResults?: boolean;
   minimap: { enabled: boolean; aspect: string; names: boolean; leaderBig: boolean };
   overlay: { names?: boolean; board?: number; boardSide?: "left" | "right"; boardScale?: number; showInLobby?: boolean };
   camera?: { shots?: Record<string, boolean> };

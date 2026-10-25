@@ -10,6 +10,12 @@
   --pico-primary-hover: #ffe14a;
   --pico-primary-inverse: #000;
   --pico-primary-focus: rgba(255,212,0,.25);
+  --pico-primary-background: #ffd400;          /* Pico v2 buttons read these, not --pico-primary */
+  --pico-primary-border: #ffd400;
+  --pico-primary-underline: rgba(255,212,0,.5);
+  --pico-primary-hover-background: #ffe14a;
+  --pico-primary-hover-border: #ffe14a;
+  --pico-primary-hover-underline: #ffe14a;
   --pico-border-radius: 4px;
   --pico-form-element-background-color: #0b0d10;
   --pico-form-element-border-color: #2f343b;

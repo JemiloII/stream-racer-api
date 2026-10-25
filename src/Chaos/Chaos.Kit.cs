@@ -257,4 +257,48 @@ static partial class Chaos
 
     // A feed line for the event ("METEOR SHOWER", "DRAGON"...), with a short word in the icon spot.
     public static void Announce(string text, string word, Vehicle follow = null) => Game.FeedLine(text, word, follow);
+
+    // ---- siren ----
+
+    // An air-raid siren, made here rather than shipped: two wails, each winding up to its top note, holding and
+    // winding down. A rotor siren is a buzzy tone (odd harmonics) with a fast flutter from the chopping rotor.
+    const int SirenRate = 22050;
+    const float SirenSeconds = 14f, SirenVolume = 0.35f;
+    const float SirenLow = 140f, SirenHigh = 620f;      // Hz: wound down / full speed
+    static AudioClip _siren;
+
+    public static void Siren()
+    {
+        _siren ??= MakeSiren();
+        var source = Root.AddComponent<AudioSource>();   // goes with the chaos root on a clear
+        source.clip = _siren;
+        source.volume = SirenVolume;
+        source.spatialBlend = 0f;
+        source.Play();
+        Object.Destroy(source, SirenSeconds + 0.5f);
+    }
+
+    static AudioClip MakeSiren()
+    {
+        var samples = new float[(int)(SirenRate * SirenSeconds)];
+        double phase = 0;
+        for (int index = 0; index < samples.Length; index++)
+        {
+            float time = index / (float)SirenRate;
+            float pitch = Mathf.Lerp(SirenLow, SirenHigh, SirenWind(time % (SirenSeconds / 2f)));
+            phase += 2 * System.Math.PI * pitch / SirenRate;
+            float tone = Mathf.Sin((float)phase) + Mathf.Sin((float)phase * 3f) / 3f + Mathf.Sin((float)phase * 5f) / 6f;
+            float flutter = 0.85f + 0.15f * Mathf.Sin(time * 2f * Mathf.PI * 18f);
+            float fade = Mathf.Clamp01(time / 0.3f) * Mathf.Clamp01((SirenSeconds - time) / 0.8f);
+            samples[index] = tone * flutter * fade * 0.55f;
+        }
+        var clip = AudioClip.Create("sr-siren", samples.Length, 1, SirenRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
+
+    // One 7 s wail: winds up for 2.5 s, holds 1.5 s, winds down for 3 s (0 = low note, 1 = top).
+    static float SirenWind(float time) => time < 2.5f
+        ? Mathf.SmoothStep(0f, 1f, time / 2.5f)
+        : time < 4f ? 1f : 1f - Mathf.SmoothStep(0f, 1f, (time - 4f) / 3f);
 }

@@ -24,6 +24,15 @@ public class RankedTests
         Assert.True(RankedBlocks(root, target, action));
     }
 
+    [Fact]
+    public void Chaos_runs_in_ranked_only_when_switched_on()
+    {
+        Assert.True(RankedBlocks("chaos", "meteors", null));
+        Assert.False(RankedBlocks("chaos", "meteors", null, chaosInRanked: true));
+        Assert.True(RankedBlocks("respawn", "all", null, chaosInRanked: true));
+        Assert.True(RankedBlocks("boost", "all", "add", chaosInRanked: true));
+    }
+
     [Theory]
     [InlineData("join", null, null)]
     [InlineData("lobby", null, null)]

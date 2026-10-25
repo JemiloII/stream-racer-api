@@ -118,7 +118,28 @@ def environment(db, names):
     env = UnityPy.Environment()
     for bundle_name, data in files.items():
         env.load_file(data, name=bundle_name)
+    env.sr_files = files
     return env
+
+
+# The real Uma look: Stream Racer's Unity loads the game's own bundles (shaders included), so every bundle a uma needs
+# is written decrypted to the shared bundles/ folder (each once) and listed in her model.json.
+def bundle_file(name):
+    return "".join(character if character.isalnum() or character == "_" else "_" for character in name) + ".bundle"
+
+
+def write_bundles(env, extra=None):
+    folder = os.path.join(OUTPUT, "bundles")
+    os.makedirs(folder, exist_ok=True)
+    files = dict(env.sr_files)
+    files.update(extra or {})
+    written = []
+    for name, data in files.items():
+        target = os.path.join(folder, bundle_file(name))
+        if not os.path.exists(target) or os.path.getsize(target) != len(data):
+            open(target, "wb").write(data)
+        written.append(bundle_file(name))
+    return sorted(written)
 
 
 # ---- building one uma ----
@@ -200,6 +221,7 @@ class Model:
                 "indices": self.ints(part),
                 "indexCount": len(part),
                 "texture": self.main_texture(material),
+                "material": material.m_Name if material is not None else None,
             })
         self.meshes.append(entry_)
 
@@ -390,7 +412,11 @@ def export(db, chara_id, about, outfit="racewear"):
         print("%d %s (%s): not downloaded by the game yet, skipped" % (chara_id, name, outfit))
         return
     tail, tail_prefab, tail_texture = tail_of(db, chara_id, about["tail"])
-    tail_assets = [tail] + [texture_asset(db, tail_texture + suffix) for suffix in ("", "_shad_c")]
+    tail_stem = tail_texture[:-len("_diff")]
+    # a shared tail's masks are the model's _0000 set; an exclusive tail (tex_tail<id>_00) has its own
+    shared_masks = tail_stem[:tail_stem.index("_00_") + len("_00_")] + "0000" if "_00_" in tail_stem else tail_stem
+    tail_assets = [tail] + [texture_asset(db, name) for name in (
+        tail_texture, tail_stem + "_shad_c", shared_masks + "_base", shared_masks + "_ctrl")]
     env = environment(db, needed + [asset for asset in tail_assets if asset]
                       + [shadow for shadow in shadows if downloaded(db, shadow)])
     model = Model()
@@ -412,10 +438,12 @@ def export(db, chara_id, about, outfit="racewear"):
     for texture_name, texture in model.textures.items():
         toned(env, texture).save(os.path.join(folder, texture_name + ".png"))
     rain_versions(db, folder, list(model.textures))
+    save_icon(db, chara_id, folder)
     open(os.path.join(folder, "model.bin"), "wb").write(model.blob)
     info = {
         "id": chara_id,
         "name": name,
+        "bundles": write_bundles(env),
         "heightCm": about["heightCm"],
         "runningType": about["runningType"],
         "style": about["style"],
@@ -447,6 +475,27 @@ def recolour(body_meshes, model, env, texture_name):
         del model.textures[unused]
 
 
+# Her little face (chara/chr<id>/chr_icon_<id>) for the skill pop-up.
+def save_icon(db, chara_id, folder):
+    asset = "chara/chr%d/chr_icon_%d" % (chara_id, chara_id)
+    if not downloaded(db, asset):
+        return
+    icon = texture_named(environment(db, [asset]), "chr_icon_%d" % chara_id)
+    if icon is not None:
+        icon.image.save(os.path.join(folder, "icon.png"))
+
+
+# The in-race skill effect indicator the game floats over a girl (atlas/race/race sprite utx_race_skill_icon_0_000:
+# "Velocity Up"), shown when her car boosts.
+def export_cutin(db):
+    env = environment(db, ["atlas/race/race", "atlas/race/race_tex"])
+    for item in env.objects:
+        if item.type.name == "Sprite" and item.read().m_Name == "utx_race_skill_icon_0_000":
+            item.read().image.save(os.path.join(OUTPUT, "velocity_up.png"))
+            print("velocity_up.png written")
+            return
+
+
 def export_gym_colours(db):
     folder = os.path.join(OUTPUT, "gym")
     os.makedirs(folder, exist_ok=True)
@@ -455,7 +504,13 @@ def export_gym_colours(db):
     wanted = names + [name[:-len("_diff")] + "_shad_c" for name in names]
     assets = ["3d/chara/body/bdy0001_00/textures/%s/%s" % ("zekken" if "zekken" in name else "offline", name)
               for name in wanted]
-    env = environment(db, [asset for asset in assets if downloaded(db, asset)])
+    real = ["tex_bdy0001_00_00_waku0_base", "tex_bdy0001_00_00_waku0_ctrl"]
+    real += ["tex_bdy0001_00_00_0_%d_00_%s" % (bust, kind) for bust in range(5) for kind in ("base", "ctrl")]
+    real += ["tex_bdy0001_00_zekken0_%d_%s" % (bust, kind) for bust in range(5) for kind in ("base", "ctrl")]
+    assets += [texture_asset(db, name) for name in real]
+    env = environment(db, [asset for asset in assets if asset and downloaded(db, asset)])
+    write_bundles(env)
+    json.dump({"bundles": write_bundles(env)}, open(os.path.join(folder, "bundles.json"), "w"))
     for item in env.objects:
         if item.type.name == "Texture2D":
             texture = item.read()
@@ -488,6 +543,7 @@ if __name__ == "__main__":
         arguments = arguments[1:] if outfit == "gym" else arguments
         if outfit == "gym":
             export_gym_colours(connection)
+        export_cutin(connection)
         for chara in [int(arg) for arg in arguments] or list(everyone):
             try:
                 export(connection, chara, everyone[chara], outfit)

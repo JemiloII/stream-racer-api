@@ -20,7 +20,8 @@ static partial class Chaos
     const float VoidNightElevation = 55f;       // at night the hole hangs this high, opposite the moon
     const float VoidAirSeconds = 0.3f;          // all wheels off the ground this long = eaten
     const float VoidAirSpeed = 5f;              // ...while moving at least this fast flat (a respawn drop isn't a jump)
-    const float VoidEatSeconds = 2.5f;          // the flight up into the hole
+    const float VoidEatSeconds = 6f;            // the flight up into the hole: a slow float off the road, then faster
+    const float VoidCamBack = 20f, VoidCamUp = 2.5f;   // the watching camera: this far behind the car (away from the hole)
     const float VoidPullDistance = 160f;        // how far toward the hole the car flies in that time
     const float VoidSwirlRadius = 3f;           // it corkscrews this wide at the start, tightening to nothing
     const float VoidSpinSpeed = 540f;           // deg/s tumble on the way up
@@ -441,12 +442,41 @@ static partial class Chaos
         body.interpolation = RigidbodyInterpolation.None;
         body.isKinematic = true;
         _voidMeals.Add(meal);
+        VoidWatchCam(meal);
         Announce(Game.DisplayName(vehicle) + " fell into the black hole", "VOID", vehicle);
         Plugin.Emit("blackhole", new
         {
             login = Game.Login(vehicle),
             displayName = Game.DisplayName(vehicle),
         });
+    }
+
+    // Cuts to a camera standing behind the car on the ground, looking up past it at the hole (Cam.PlaneCam: any key
+    // in the game or "Plane cam off" leaves it). It stays on the newest swallowed car and goes back when none are left.
+    const string VoidCamLabel = "black hole";
+
+    static void VoidWatchCam(VoidMeal meal)
+    {
+        var flat = new Vector3(meal.Toward.x, 0f, meal.Toward.z);
+        flat = flat.sqrMagnitude > 1e-4f ? flat.normalized : meal.Car.forward;
+        var from = meal.From - flat * VoidCamBack + Vector3.up * VoidCamUp;
+        if (Cam.PlaneCam(meal.Car, VoidCamLabel, from) && !_voidCamOnClear)
+        {
+            _voidCamOnClear = true;
+            OnClear(EndVoidCam);
+        }
+    }
+
+    static bool _voidCamOnClear;
+
+    static void EndVoidCam()
+    {
+        _voidCamOnClear = false;
+        ForgetOnClear(EndVoidCam);
+        if (Cam.OnEventCam(VoidCamLabel))
+        {
+            Cam.EndPlaneCam();
+        }
     }
 
     // Flies each eaten car up toward the hole (speeding up, corkscrewing, tumbling, shrinking); done ones come back.
@@ -460,6 +490,14 @@ static partial class Chaos
             {
                 _voidMeals.RemoveAt(index);
                 VoidSpit(meal);
+                if (_voidMeals.Count == 0)
+                {
+                    EndVoidCam();
+                }
+                else if (Cam.OnEventCam(VoidCamLabel))
+                {
+                    VoidWatchCam(_voidMeals[_voidMeals.Count - 1]);
+                }
                 continue;
             }
             VoidFly(meal, progress);
@@ -471,7 +509,7 @@ static partial class Chaos
         var across = Vector3.Cross(meal.Toward, Vector3.up);
         across = across.sqrMagnitude < 1e-6f ? Vector3.right : across.normalized;
         var swirl = Quaternion.AngleAxis(progress * 720f, meal.Toward) * across * VoidSwirlRadius * (1f - progress);
-        meal.Car.position = meal.From + meal.Toward * VoidPullDistance * progress * progress + swirl;
+        meal.Car.position = meal.From + meal.Toward * VoidPullDistance * progress * progress * progress + swirl;
         meal.Car.Rotate(meal.SpinAxis, VoidSpinSpeed * Time.deltaTime, Space.World);
         meal.Car.localScale = meal.Scale * Mathf.Lerp(1f, VoidSmallest, progress);
     }

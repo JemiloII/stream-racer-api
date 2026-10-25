@@ -1,6 +1,6 @@
 // Chaos.Meteor: a meteor shower. Glowing rocks streak in diagonally onto the road just ahead of racing cars (a red
 // ring on the ground marks each spot while it falls), boom whoever they hit and leave a crater in the track. Craters
-// stay until the race ends; a car that drives into one falls in and booms (TickHoles), ResetHoles clears them.
+// are only scenery (the meteor itself does the booming) and stay until the race ends; ResetHoles clears them.
 using System.Collections;
 
 namespace StreamRacerApi;
@@ -10,16 +10,14 @@ static partial class Chaos
     const int MeteorMin = 6;                    // meteors per shower (inclusive)
     const int MeteorMax = 12;
     const float ShowerSeconds = 12f;            // the shower is spread over this long
-    const float FallMinSeconds = 1.5f;          // how long one meteor is visible before it lands
-    const float FallMaxSeconds = 2.5f;
-    const float MeteorHeight = 90f;             // where it starts above its target
-    const float MeteorSlant = 55f;              // and how far off to the side (the diagonal)
+    const float FallMinSeconds = 2.5f;          // how long one meteor is visible before it lands
+    const float FallMaxSeconds = 3.5f;
+    const float MeteorHeight = 220f;            // where it starts above its target
+    const float MeteorSlant = 130f;             // and how far off to the side (the diagonal)
     const float LeadExtra = 6f;                 // aim this far past where the car will be when it lands
     const float SideJitter = 3f;                // up to this far left/right of the road line
     const float MeteorBlastRadius = 5f;
-    const float HoleRadius = 2.6f;              // a car whose centre gets this close falls in
-    const float HoleHeightTolerance = 1.6f;     // ...when it is this near the crater's height (not jumping over it)
-    const float HoleCooldown = 10f;             // the same crater can't take the same car again for this long
+    const float HoleRadius = 2.6f;              // crater size
     const float HoleSmokeSeconds = 8f;          // the crater smokes for this long after the impact
     const int RimRocks = 12;
 
@@ -38,9 +36,7 @@ static partial class Chaos
     // One crater left in the track and, per car, when it may take that car again.
     class Crater
     {
-        public Vector3 Center;
         public Transform Visual;
-        public readonly Dictionary<Vehicle, float> ReadyAt = new();
     }
 
     static readonly List<Crater> _craters = new();
@@ -204,11 +200,7 @@ static partial class Chaos
         var smokeStart = new Color(0.25f, 0.24f, 0.23f, 0.7f);
         var smoke = Stream(crater, smokeStart, new Color(0.3f, 0.3f, 0.3f, 0f), 5f, 2f, 1f, 3.5f);
         Spawn(StopCraterSmoke(smoke, HoleSmokeSeconds));
-        _craters.Add(new Crater
-        {
-            Center = center,
-            Visual = crater,
-        });
+        _craters.Add(new Crater { Visual = crater });
     }
 
     static void RimRock(Transform crater, float angle)
@@ -228,38 +220,6 @@ static partial class Chaos
         {
             system.Stop(true, ParticleSystemStopBehavior.StopEmitting);
         }
-    }
-
-    // Every frame: a racing car that drives into a crater falls in.
-    static partial void TickHoles()
-    {
-        if (_craters.Count == 0)
-        {
-            return;
-        }
-        var racers = Racers();
-        foreach (var hole in _craters)
-        {
-            foreach (var vehicle in racers)
-            {
-                CheckHole(hole, vehicle);
-            }
-        }
-    }
-
-    static void CheckHole(Crater hole, Vehicle vehicle)
-    {
-        var offset = CarPosition(vehicle) - hole.Center;
-        if (Mathf.Abs(offset.y) > HoleHeightTolerance || new Vector2(offset.x, offset.z).magnitude >= HoleRadius)
-        {
-            return;
-        }
-        if (hole.ReadyAt.TryGetValue(vehicle, out float readyAt) && Time.unscaledTime < readyAt)
-        {
-            return;
-        }
-        hole.ReadyAt[vehicle] = Time.unscaledTime + HoleCooldown;
-        Game.StrikeNow(vehicle, "a meteor crater");
     }
 
     static partial void ResetHoles()

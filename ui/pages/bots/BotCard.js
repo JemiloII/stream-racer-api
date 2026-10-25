@@ -14,11 +14,12 @@ function EditablePicture({ bot, onReplace }) {
     </label>`;
 }
 
-export default function BotCard({ bot, picked, inLobby, racing, autoJoin, autoBoost, onTogglePick, onToggleAutoJoin, onToggleAutoBoost, onRemove, onReplacePicture, onJoin }) {
-  const badges = [...(autoJoin ? ["Auto-join"] : []), ...(autoBoost ? [] : ["API boosts"])];
+export default function BotCard({ bot, picked, inLobby, racing, autoJoin, autoBoost, ranked, onTogglePick, onToggleAutoJoin, onToggleAutoBoost, onToggleRanked, onRemove, onReplacePicture, onJoin }) {
+  const badges = [...(autoJoin ? ["Auto-join"] : []), ...(autoBoost ? [] : ["API boosts"]), ...(ranked ? ["Ranked"] : [])];
   const tools = html`
     <button class=${"star" + (autoJoin ? " on" : "")} title=${autoJoin ? "auto-joins every lobby (click to stop)" : "auto-join every lobby"} onClick=${(event) => { event.stopPropagation(); onToggleAutoJoin(bot); }}>★</button>
     <button class=${"bolt" + (autoBoost ? " on" : "")} title=${autoBoost ? "auto-boost on (click: let something else control it)" : "auto-boost off: a third party drives this car's boosts"} onClick=${(event) => { event.stopPropagation(); onToggleAutoBoost(bot); }}>↯</button>
+    <button class=${"bolt" + (ranked ? " on" : "")} title=${ranked ? "also races in ranked (click: unranked races only)" : "unranked races only (click: also race in ranked)"} onClick=${(event) => { event.stopPropagation(); onToggleRanked(bot); }}>R</button>
     <span class="sp"></span>
     <button class="x" title="remove" onClick=${(event) => { event.stopPropagation(); onRemove(bot); }}>✕</button>`;
   return html`

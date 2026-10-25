@@ -122,6 +122,10 @@ static partial class Chaos
             renderer.enabled = false;
         }
         _costumes[vehicle] = costume;
+        if (kind.StartsWith("uma:"))
+        {
+            OnUmaLayer(costume.Outfit.gameObject);   // the whole outfit, so the per-frame check below stays cheap
+        }
         animate(0f, 0f);
         EmitCostume(vehicle, kind, seconds);
     }
@@ -210,6 +214,10 @@ static partial class Chaos
             {
                 renderer.enabled = false;   // the game switched it back on (respawn blink): keep the body hidden
             }
+        }
+        if (costume.Kind.StartsWith("uma:") && costume.Outfit.gameObject.layer != UmaLayer)
+        {
+            OnUmaLayer(costume.Outfit.gameObject);   // the game re-layers everything under a car now and then
         }
         float speed = costume.Body != null ? Vector3.Dot(costume.Body.velocity, car.transform.forward) : 0f;
         costume.Animate(Time.time - costume.Since, speed);

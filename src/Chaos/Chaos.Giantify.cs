@@ -128,7 +128,7 @@ static partial class Chaos
         {
             yield break;
         }
-        int booms = Game.RankedMode ? 0 : Mathf.Max(1, Settings.Current.chaos.giantifyBits / BitsPerBoom);
+        int booms = !Game.ChaosAllowed ? 0 : Mathf.Max(1, Settings.Current.chaos.giantifyBits / BitsPerBoom);
         Guard("giantify paint", () => Paint(request));
         Announce("GIANT " + request.EmoteName + " · " + request.DisplayName, "GIANT");
         Plugin.Emit("giantify", new

@@ -11,6 +11,7 @@ export default function RaceCard() {
   const snapshot = useStore((state) => state.snapshot);
   const { settings, saveSettings } = useStore();
   const ranked = settings.sendResults !== false;
+  const chaosInRanked = settings.chaos?.inRanked !== false;
   const chatJoinUrl = useStore((state) => state.uiSettings().chatJoinUrl);
   // Twitch's chatters list needs a moderator token the game doesn't have, so the bot does it (voisona-bot: POST /race/join-chat).
   const joinChat = async () => {
@@ -27,6 +28,11 @@ export default function RaceCard() {
         <input type="checkbox" role="switch" checked=${ranked} onChange=${(event) => saveSettings({ sendResults: event.target.checked })} />
         <span>Ranked ${ranked ? "on" : "off"}</span>
       </label>
+      ${ranked ? html`
+        <label class="switch-row" title="Off: a ranked race is plain Stream Racer. Respawns and extra boosts are off in ranked either way.">
+          <input type="checkbox" role="switch" checked=${chaosInRanked} onChange=${(event) => saveSettings({ chaos: { ...settings.chaos, inRanked: event.target.checked } })} />
+          <span>${chaosInRanked ? "Chaos ranked (random events on)" : "Plain ranked (no chaos)"}</span>
+        </label>` : null}
       <div class="btn-row">
         <button class="secondary" onClick=${() => api("/lobby")}>Create lobby</button>
         <button onClick=${() => api("/race/start")} title="starts the lobby countdown, like the START button">Start countdown</button>

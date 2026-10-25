@@ -1,37 +1,44 @@
 // The live timing board shared by the Controls and Camera pages: one row per car from the race snapshot with the
-// per-racer quick actions (chase cam, boom, boost, +boost, slow, respawn, finish, kick) and the auto-join star.
+// per-racer quick actions (chase cam, kick; unranked also boom, boost and a "⋯" menu) and the auto-join star.
 import { html, useCss } from "../lib/html.js";
 import { api } from "../lib/api.js";
 import { useStore } from "../store.js";
 
-// ranked = Ranked on: the mod's extras (boom, free boost, +boost, slow, grow, respawn, finish) are refused
-// by the API, so their buttons are greyed out here instead of failing.
+// ranked = Ranked on: the mod's extras (boom, boost, +boost, slow, grow, respawn, finish) are refused by the API, so
+// the row shows only what works: chase cam and kick. Unranked: boom and boost up front, the rest behind "⋯".
+function RacerExtras({ racer, target, uiSettings }) {
+  return html`
+    <button class="b" title="boom" onClick=${() => api(`/boom/${target}`)}>💥</button>
+    <button class="z" title="boost now" onClick=${() => api(`/boost/${target}`)}>⚡</button>
+    <details class="more">
+      <summary title="more">⋯</summary>
+      <div class="menu">
+        <button class="p" title="+1 boost to their pool" onClick=${() => api(`/boost/${target}/add`)}>+⚡ boost</button>
+        <button class="s" title="slow" onClick=${() => api(`/speed/${target}?mult=${uiSettings.slowMult}&seconds=${uiSettings.slowSecs}`)}>🐌 slow</button>
+        <button class="gr" title="grow (12 s)" onClick=${() => api(`/grow/${target}`)}>🦖 grow</button>
+        <button class="r" title="respawn" onClick=${() => api(`/respawn/${target}`)}>🏥 respawn</button>
+        <button class="f" title="crossed the line but the game missed it" onClick=${() => confirm(`Mark ${racer.displayName} as finished?`) && api(`/finish/${target}`)}>🏁 finished</button>
+      </div>
+    </details>`;
+}
+
 function RacerRow({ racer, streamer, uiSettings, starred, onToggleStar, ranked }) {
   const target = encodeURIComponent(racer.login);
   return html`
-    <div class="row-r">
+    <div class="row-r" data-login=${racer.login} title=${racer.login}>
       <div class="pos">${racer.place}</div>
       <button class=${"star" + (starred ? " on" : "")} title=${starred ? "on the auto-join list (click to remove)" : "add to the auto-join list"} onClick=${() => onToggleStar(racer)}>★</button>
       <div class="who">
         <span class="swatch" style=${{ background: racer.color, color: racer.color }}></span>
-        <div>
-          <div class="nm">${racer.displayName}${racer.login === streamer ? html`<span class="you">YOU</span>` : null}</div>
-          <div class="lg">${racer.login}${racer.sub ? " · sub" : ""}</div>
-        </div>
+        <div class="nm">${racer.displayName}${racer.login === streamer ? html`<span class="you">YOU</span>` : null}</div>
       </div>
       <div class=${"track" + (racer.finished ? " done" : "")}><i style=${{ width: (racer.finished ? 100 : racer.pct).toFixed(1) + "%" }}></i></div>
       <div class=${"pct" + (racer.finished ? " done" : "")}>${racer.finished ? "FIN" : racer.pct.toFixed(0) + "%"}</div>
       <div class="quick">
+        <span class="boosts" title="boosts left">⚡<b>${racer.boosts}</b></span>
         <button class="c" title="chase cam on them" onClick=${() => api(`/camera/chase/${target}`)}>🎥</button>
-        <button class="b" title="boom" disabled=${ranked} onClick=${() => api(`/boom/${target}`)}>💥</button>
-        <button class="z" title="boost now" disabled=${ranked} onClick=${() => api(`/boost/${target}`)}>⚡</button>
-        <button class="p" title="+1 boost to their pool" disabled=${ranked} onClick=${() => api(`/boost/${target}/add`)}><span class="plus">+</span>⚡</button>
-        <button class="s" title="slow" disabled=${ranked} onClick=${() => api(`/speed/${target}?mult=${uiSettings.slowMult}&seconds=${uiSettings.slowSecs}`)}>🐌</button>
-        <button class="gr" title="grow (12 s)" disabled=${ranked} onClick=${() => api(`/grow/${target}`)}>🦖</button>
-        <button class="r" title="respawn" disabled=${ranked} onClick=${() => api(`/respawn/${target}`)}>🏥</button>
-        <button class="f" title="mark as finished (crossed the line but the game missed it)" disabled=${ranked} onClick=${() => confirm(`Mark ${racer.displayName} as finished?`) && api(`/finish/${target}`)}>🏁</button>
+        ${ranked ? null : html`<${RacerExtras} racer=${racer} target=${target} uiSettings=${uiSettings} />`}
         <button class="k" title="kick (lobby only)" onClick=${() => api(`/kick/${target}`)}>✕</button>
-        <span class="boosts" title="boosts left"><b>${racer.boosts}</b></span>
       </div>
     </div>`;
 }

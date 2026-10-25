@@ -170,13 +170,42 @@ public static class Pure
         return 0;
     }
 
+    // ---- uma pick (!race uma <name>) ----
+    // `names` = chara id -> name. An exact name (ignoring case, spaces and punctuation) wins, else the one name that
+    // contains the query ("mcqueen" -> Mejiro McQueen). Null when nothing or several match; `close` then lists up to 3.
+    static string UmaKey(string text) => new string((text ?? "").Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
+    public static string MatchUma(string query, IDictionary<string, string> names, out List<string> close)
+    {
+        string wanted = UmaKey(query);
+        close = new List<string>();
+        if (wanted.Length == 0)
+        {
+            return null;
+        }
+        var exact = names.FirstOrDefault(pair => UmaKey(pair.Value) == wanted);
+        if (exact.Key != null)
+        {
+            return exact.Key;
+        }
+        var partial = names.Where(pair => UmaKey(pair.Value).Contains(wanted)).ToList();
+        if (partial.Count == 1)
+        {
+            return partial[0].Key;
+        }
+        close = partial.Select(pair => pair.Value).OrderBy(name => name).Take(3).ToList();
+        return null;
+    }
+
     // ---- ranked ----
     // Ranked on (settings.sendResults): only the game's own racing counts, so the API refuses what the mod adds on top
     // (free / extra boosts, slow, grow, drift, weather, surfaces, marking a finish, every respawn incl. your own,
     // API booms, the game's chaos effects fired through the API). Allowed: lobby, joins, colours, camera, spending a car's own boost pool (/boost/me, /boost/:x/use).
+// chaosInRanked (settings.chaos.inRanked) lets our chaos events (/chaos) run in a ranked race too.
     static readonly HashSet<string> RankedBlockedRoots = new() { "boom", "speed", "grow", "drift", "surface", "weather", "finish", "respawn", "effect", "chaos" };
-    public static bool RankedBlocks(string root, string target, string action)
+    public static bool RankedBlocks(string root, string target, string action, bool chaosInRanked = false)
     {
+        if (root == "chaos" && chaosInRanked) return false;
         if (RankedBlockedRoots.Contains(root ?? "")) return true;
         if (root == "boost") return target != "me" && action != "use";
         return false;

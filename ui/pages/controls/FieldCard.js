@@ -21,6 +21,7 @@ function ActionRow({ label, hint, children, wide }) {
 export default function FieldCard() {
   const { snapshot, settings, saveSettings } = useStore();
   const ranked = settings.sendResults !== false;   // Ranked on: these are all the mod's extras, refused by the API
+  const chaosOff = ranked && settings.chaos?.inRanked === false;   // chaos events may run in ranked (settings.chaos.inRanked)
   const uiSettings = useStore((state) => state.uiSettings());
   const setUiSetting = (name, value) => saveSettings({ ui: { ...uiSettings, [name]: value } });
   const boostAllPath = `/boost/all${uiSettings.boostForce ? `?force=${uiSettings.boostForce}&seconds=${uiSettings.boostSecs || 3}` : ""}`;
@@ -66,8 +67,8 @@ export default function FieldCard() {
       <//>
       <${ActionRow} wide label="Chaos" hint="start one now (they also happen on their own: Settings → Chaos events)">
         ${CHAOS_EVENTS.map(([name, label]) => html`
-          <button key=${name} class="secondary" disabled=${ranked} onClick=${() => api(`/chaos/${name}`)}>${label}</button>`)}
-        <button class="secondary" disabled=${ranked} onClick=${() => api("/chaos/clear")}>Clear</button>
+          <button key=${name} class="secondary" disabled=${chaosOff} onClick=${() => api(`/chaos/${name}`)}>${label}</button>`)}
+        <button class="secondary" disabled=${chaosOff} onClick=${() => api("/chaos/clear")}>Clear</button>
       <//>
       <${ActionRow} label="Respawn all" hint="the game's stuck-car reset">
         <button class="secondary" disabled=${ranked} onClick=${() => api("/respawn/all")}>Fire</button>
