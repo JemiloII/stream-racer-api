@@ -4,13 +4,15 @@ Stream Racer API: a BepInEx plugin that exposes [Stream Racer](https://store.ste
 
 ## Install
 
-**Release zip:** contains everything, BepInEx 5.4.23.3 (`winhttp.dll`, `doorstop_config.ini`, `BepInEx/core`) plus the plugin at `BepInEx/plugins/StreamRacerApi.dll`. Close the game, unzip anywhere and double-click `Install Stream Racer API.bat` (finds your Steam folder and copies it all in), or unzip over the game folder next to `StreamRacer.exe` by hand. Launch the game, open `http://localhost:8793`. See `INSTALL.txt` inside the zip.
+**Setup exe (easiest):** download `StreamRacerApiSetup-<version>.exe` from the [latest release](https://github.com/JemiloII/stream-racer-api/releases/latest) and run it. It finds the game in your Steam libraries (or lets you pick the folder), installs, shows the installed and newest version, updates, and uninstalls (the mod, its settings, and BepInEx when no other mod uses it). Run it again any time. In the game, a popup also offers new versions and an uninstall.
+
+**Release zip (by hand):** BepInEx 5.4.23.3 (`winhttp.dll`, `doorstop_config.ini`, `BepInEx/core`) plus the plugin at `BepInEx/plugins/StreamRacerApi.dll`. Close the game and unzip over the game folder next to `StreamRacer.exe`. Launch the game, open `http://localhost:8793`. See `INSTALL.txt` inside the zip.
 
 **From source** (Git Bash, .NET 8 SDK):
 
 ```
 ./install.sh          # builds, installs BepInEx if missing, copies the plugin into the game folder
-scripts/release.sh    # build a release: dist/stream-racer-api-<version>.zip (BepInEx + plugin + INSTALL.txt)
+scripts/release.sh    # build a release: dist/stream-racer-api-<version>.zip + dist/StreamRacerApiSetup-<version>.exe
 dotnet test tests/unit
 ```
 

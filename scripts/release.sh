@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build the release zip: everything a user unzips over the game folder (BepInEx + the plugin + INSTALL.txt).
-# Output: dist/stream-racer-api-<version>.zip, <version> read from src/Plugin.cs. Safe to re-run.
+# Build a release: dist/stream-racer-api-<version>.zip (BepInEx + the plugin + INSTALL.txt, what the in-game updater
+# downloads) and dist/StreamRacerApiSetup-<version>.exe (that zip inside a setup window: install, update, uninstall).
+# <version> is read from src/Plugin.cs. Safe to re-run. Attach both to a GitHub release tagged v<version>.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/bepinex.sh
@@ -19,13 +20,12 @@ mkdir -p "$stage"
 unzip -q -o "$(bepinex_zip)" -d "$stage"
 mkdir -p "$stage/BepInEx/plugins"
 cp build/StreamRacerApi.dll "$stage/BepInEx/plugins/"
-cp "scripts/Install Stream Racer API.bat" "$stage/"   # double-click installer: finds the Steam folder, copies everything
 
 cat > "$stage/INSTALL.txt" <<EOF
 Stream Racer API $version
 
-Easiest: unzip anywhere, close the game, double-click "Install Stream Racer API.bat". It finds your Steam
-folder, copies everything in and tells you when it's done.
+Easiest: download StreamRacerApiSetup-$version.exe from the same release page and run it. It finds the game,
+installs, updates and uninstalls.
 
 By hand:
 1. Close Stream Racer.
@@ -53,4 +53,9 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.write(path, os.path.relpath(path, stage).replace(os.sep, "/"))
 EOF
 
+setup=dist/StreamRacerApiSetup-$version.exe
+dotnet build installer -c Release -nologo -v q -p:PayloadZip="$PWD/$zip"
+cp "installer/bin/Release/Stream Racer API Setup.exe" "$setup"
+
 echo "$zip"
+echo "$setup"

@@ -16,7 +16,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.46.1"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.47.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
@@ -42,17 +42,45 @@ public class Plugin : BaseUnityPlugin
         Port = Config.Bind("api", "Port", 8793, "HTTP/SSE port");
         TickHz = Config.Bind("api", "TickHz", 4f, "full 'positions' snapshot rate while racing");
         PosHz = Config.Bind("api", "PosHz", 60f, "light 'pos' event rate while racing (login, x, z, pct, place per car) for smooth maps/overlays");
-        UpdateUrl = Config.Bind("api", "UpdateUrl", "", "URL of a JSON {version, url} describing the latest release; GET /version then reports upToDate and the pages color the version. Empty = no check.");
+        UpdateUrl = Config.Bind("api", "UpdateUrl", "", "where to look for updates: empty = this mod's GitHub releases, a URL of a JSON {version, url}, or off");
         Token = Config.Bind("api", "Token", "", "if set, every API call needs 'Authorization: Bearer <token>' (or ?token= for SSE). The control page still loads; enter the token on its Settings page.");
         BindAll = Config.Bind("api", "BindAll", false, "listen on all interfaces so a bot on another machine can reach the API. Set a Token first. Windows needs once: netsh http add urlacl url=http://+:PORT/ user=Everyone");
         CamUp = Config.Bind("camera", "Up", KeyCode.Space, "free cam up (game's E still works)");
         CamDown = Config.Bind("camera", "Down", KeyCode.C, "free cam down (game's Q still works)");
         BoostKey = Config.Bind("hotkeys", "Boost", KeyCode.R, "use one of the streamer's own boosts (same as typing !boost)");
 
-        new Harmony("shibiko.streamracer.api").PatchAll();
+        Updates.Kick();
+        if (!PatchGame())
+        {
+            return;
+        }
         Settings.Init();
 
         StartHttp();
+    }
+
+    // A game update renames every obfuscated method, so patches stop finding their targets. Then the mod takes back
+    // whatever it did patch and stays off for this session: the game runs untouched until a mod build for it exists.
+    public static bool Off;   // this build doesn't fit the game: nothing patched, no server, only the UpdatePrompt
+
+    void OnGUI() => UpdatePrompt.Draw();
+
+    bool PatchGame()
+    {
+        var harmony = new Harmony("shibiko.streamracer.api");
+        try
+        {
+            harmony.PatchAll();
+            return true;
+        }
+        catch (System.Exception error)
+        {
+            harmony.UnpatchSelf();
+            Off = true;
+            Logger.LogError($"game {Application.version} doesn't match this mod build ({Version}), mod is off; "
+                + $"get the latest from https://github.com/JemiloII/stream-racer-api. ({error.GetBaseException().Message})");
+            return false;
+        }
     }
 
     void StartHttp()
@@ -138,6 +166,10 @@ public class Plugin : BaseUnityPlugin
 
     void Update()
     {
+        if (Off)
+        {
+            return;
+        }
         while (MainThread.TryDequeue(out var action)) action();
         try { Credits.Tick(); } catch (Exception error) { if (Time.frameCount % 600 == 0) Log.LogWarning("credits: " + error.Message); }
         if (Time.unscaledTime >= _nextScreen)

@@ -12,6 +12,8 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
     <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
+    <!-- Plugin.Version as the DLL's file version, so the installer can tell what is installed -->
+    <FileVersion>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)src/Plugin.cs')), '(?&lt;=Version = ")[0-9.]+').Value)</FileVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src/**/*.cs" />

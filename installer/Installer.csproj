@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Stream Racer API Setup.exe: install / update / uninstall in one window. .NET Framework 4.7.2 ships with Windows 10
+       and 11, so this is one exe with nothing else to install. scripts/release.sh embeds the release zip (PayloadZip). -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>Stream Racer API Setup</AssemblyName>
+    <RootNamespace>StreamRacerSetup</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <FileVersion>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../src/Plugin.cs')), '(?&lt;=Version = ")[0-9.]+').Value)</FileVersion>
+    <Product>Stream Racer API</Product>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" Condition="'$(PayloadZip)' != ''" />
+  </ItemGroup>
+</Project>
