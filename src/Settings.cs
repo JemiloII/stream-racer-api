@@ -217,11 +217,6 @@ static class Settings
         {
             return true;
         }
-        if (string.IsNullOrEmpty(entry.id))
-        {
-            Plugin.Log.LogWarning($"ranked: {entry.login} has no Twitch id, left out (the server would refuse the result)");
-            return false;
-        }
         return !IsBot(entry.login)
             || (Current.botOptions.TryGetValue(entry.login.ToLowerInvariant(), out var options) && options.ranked);
     }

@@ -125,6 +125,22 @@ static partial class Game
         }
     }
 
+    // The server refuses a whole result (400) with an empty user id, so id-less racers (bots without a Twitch account, id 0)
+    // are dropped and the rest keep their order, renumbered 1..n.
+    public static void DropIdless(RaceResultRequest request)
+    {
+        if (request?.RaceResults == null)
+        {
+            return;
+        }
+        var kept = request.RaceResults.Where(item => item.UserID > 0).OrderBy(item => item.Pos).ToList();
+        for (int i = 0; i < kept.Count; i++)
+        {
+            kept[i].Pos = i + 1;
+        }
+        request.RaceResults = kept;
+    }
+
     // What the backend would have answered, built here exactly like the game's own offline branch: the request echoed
     // back, every racer with the race id and place it was sent with, no points. Without a request (shouldn't happen)
     // the finishers in crossing order.

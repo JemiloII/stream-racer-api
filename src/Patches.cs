@@ -79,13 +79,18 @@ static class Patches
         }
     }
 
+    // settings.sendResults = true: racers with no Twitch account (Wa-chan) race but are left out of the upload.
     // settings.sendResults = false: the race result never leaves this PC. The game gets the answer it builds itself for
     // local test maps (the request echoed back: every racer, same race id, same places, no points), so its post-race
     // screen runs and the Grand Prix accepts it (it rejects anything that isn't that echo with a RETRY menu).
     [HarmonyPrefix, HarmonyPatch(typeof(MapApi), GameNames.ResultUpload)]
     static bool KeepResultsLocal(RaceResultRequest __0, RaceResultCallback __2)   // (request, local, onReply, onError)
     {
-        if (Settings.Current.sendResults) return true;
+        if (Settings.Current.sendResults)
+        {
+            Game.DropIdless(__0);
+            return true;
+        }
         __2?.Invoke(Game.LocalRaceResult(__0));
         return false;
     }
