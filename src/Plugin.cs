@@ -16,7 +16,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.48.0"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.49.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
@@ -203,6 +203,7 @@ public class Plugin : BaseUnityPlugin
         }
         while (MainThread.TryDequeue(out var action)) action();
         try { Credits.Tick(); } catch (Exception error) { if (Time.frameCount % 600 == 0) Log.LogWarning("credits: " + error.Message); }
+        try { VisualsSetting.Tick(); } catch (Exception error) { if (Time.frameCount % 600 == 0) Log.LogWarning("visuals setting: " + error.Message); }
         if (Time.unscaledTime >= _nextScreen)
         {
             _nextScreen = Time.unscaledTime + 0.25f;

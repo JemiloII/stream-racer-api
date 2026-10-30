@@ -94,10 +94,24 @@ static partial class Game
     // RawImage -> custom source, registered before the game's own avatar loader runs so a prefix can skip it.
     static readonly Dictionary<RawImage, string> RowImages = new();
 
+    const string TwitchPicture = "twitch:";   // RowImages source = "twitch:<login>": the racer's Twitch picture
+
     public static void RegisterRowImage(RacerProfile profile, RawImage target)
     {
         if (profile == null || target == null) return;
-        if (Images.TryGetValue(profile.Login() ?? "", out var source)) RowImages[target] = source; else RowImages.Remove(target);
+        string login = profile.Login() ?? "";
+        bool noTwitchPicture = Avatars.TryGetValue(login, out var known) && known == null;
+        if (Images.TryGetValue(login, out var source)) RowImages[target] = source;
+        else if (Settings.Current.twitchPictures && login != "" && !noTwitchPicture && !string.IsNullOrEmpty(TwitchToken)) RowImages[target] = TwitchPicture + login;
+        else RowImages.Remove(target);
+    }
+
+    // The game's painter call we skipped for a row (its method + arguments), replayed when the racer has no Twitch picture.
+    static readonly Dictionary<RawImage, (System.Reflection.MethodBase method, object[] args)> SkippedPainters = new();
+
+    public static void RememberPainter(RawImage target, System.Reflection.MethodBase method, object[] args)
+    {
+        if (target != null) SkippedPainters[target] = (method, (object[])args.Clone());
     }
 
     public static bool HasCustomImage(RawImage target) => target != null && RowImages.ContainsKey(target);
@@ -110,6 +124,19 @@ static partial class Game
 
     static IEnumerator LoadImage(string source, RawImage target)
     {
+        if (source.StartsWith(TwitchPicture))
+        {
+            string login = source.Substring(TwitchPicture.Length);
+            EnsureAvatars();
+            for (float waited = 0; waited < 10f && !Avatars.ContainsKey(login); waited += 0.25f) yield return new WaitForSeconds(0.25f);
+            Avatars.TryGetValue(login, out var url);
+            if (string.IsNullOrEmpty(url))
+            {
+                PaintGamePicture(target);
+                yield break;
+            }
+            source = url;
+        }
         if (!ImageCache.TryGetValue(source, out var bytes))
         {
             byte[] loaded = null; var done = new ManualResetEventSlim();
@@ -132,5 +159,19 @@ static partial class Game
         if (!texture.LoadImage(bytes)) { Plugin.Log.LogWarning($"image decode failed for {source}"); yield break; }
         target.texture = texture;
         target.enabled = true;
+        if (target.TryGetComponent<AvatarLoader>(out var painter)) painter.enabled = false;   // a reused row's portrait painter would paint over it
+    }
+
+    // No Twitch picture: let the game paint its own (the driver portrait) after all.
+    static void PaintGamePicture(RawImage target)
+    {
+        if (target == null) return;
+        RowImages.Remove(target);
+        if (target.TryGetComponent<AvatarLoader>(out var gamePainter)) gamePainter.enabled = true;
+        if (SkippedPainters.TryGetValue(target, out var painter))
+        {
+            SkippedPainters.Remove(target);
+            painter.method.Invoke(null, painter.args);
+        }
     }
 }

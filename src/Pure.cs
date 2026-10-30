@@ -484,8 +484,15 @@ public static class Pure
     // Stable pick per login so a bot keeps its color between races.
     public static string AutoColorHex(string login)
     {
-        uint hash = 2166136261; foreach (char character in (login ?? "").ToLowerInvariant()) hash = unchecked((hash ^ character) * 16777619); // FNV-1a: spreads similar names apart
-        return Palette[(int)(hash % (uint)Palette.Length)];
+        return Palette[(int)(StableHash(login) % (uint)Palette.Length)];
+    }
+
+    // FNV-1a of the lower-cased login: the same number every run, and similar names spread apart.
+    public static uint StableHash(string login)
+    {
+        uint hash = 2166136261;
+        foreach (char character in (login ?? "").ToLowerInvariant()) hash = unchecked((hash ^ character) * 16777619);
+        return hash;
     }
 
     // ---- respawns ----

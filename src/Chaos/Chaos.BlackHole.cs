@@ -17,7 +17,8 @@ static partial class Chaos
     const float VoidSkyDistance = 700f;         // hole distance from the camera (nearer if the camera can't see that far)
     const float VoidAngularRadius = 4.5f;       // degrees: how big the black ball looks
     const float VoidDayElevation = 20f;         // a low sun's spot is raised to this (degrees up)
-    const float VoidNightElevation = 55f;       // at night the hole hangs this high, opposite the moon
+    const float VoidViewElevation = 16f;        // degrees above the horizon, ahead of the camera
+    const float VoidSunInView = 40f;            // by day the sun's spot is used when within this many degrees of "ahead"
     const float VoidAirSeconds = 0.3f;          // all wheels off the ground this long = eaten
     const float VoidAirSpeed = 5f;              // ...while moving at least this fast flat (a respawn drop isn't a jump)
     const float VoidEatSeconds = 6f;            // the flight up into the hole: a slow float off the road, then faster
@@ -177,19 +178,19 @@ static partial class Chaos
         return sky.Farland != null && sky.Farland.SunEnabled && sky.Farland.SunTint.a < 0.15f;
     }
 
-    // Day: where the sun is (raised a little if it is low). Night: high up, on the side away from the moon.
+    // Low in the sky ahead of where the camera looks when the event starts (race cameras rarely look up or back), or
+    // the sun's spot by day when that is in view anyway.
     static Vector3 VoidDirection(VoidSky sky, bool night)
     {
-        if (!night)
+        var camera = Camera.main;
+        var ahead = VoidElevate(camera != null ? camera.transform.forward : Vector3.forward, VoidViewElevation);
+        if (night || sky.Sun == null)
         {
-            var toSun = -sky.Sun.transform.forward;
-            bool high = toSun.y >= Mathf.Sin(VoidDayElevation * Mathf.Deg2Rad);
-            return high ? toSun : VoidElevate(toSun, VoidDayElevation);
+            return ahead;
         }
-        var moon = sky.Farland != null && sky.Farland.MoonEnabled ? sky.Farland.MoonLight : null;
-        var light = moon != null ? moon : sky.Sun;
-        var toLight = light != null ? -light.transform.forward : Vector3.forward;
-        return VoidElevate(-toLight, VoidNightElevation);
+        var toSun = -sky.Sun.transform.forward;
+        var sunSpot = toSun.y >= Mathf.Sin(VoidDayElevation * Mathf.Deg2Rad) ? toSun : VoidElevate(toSun, VoidDayElevation);
+        return Vector3.Angle(sunSpot, ahead) <= VoidSunInView ? sunSpot : ahead;
     }
 
     // `heading` flattened to the horizon, then tipped up `degrees`.

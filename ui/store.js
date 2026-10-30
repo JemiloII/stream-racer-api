@@ -79,6 +79,7 @@ import { api, withToken } from "./lib/api.js";
  * @property {Array<{event: string, url: string, method: string, header: string, body: string, enabled: boolean}>} [webhooks]
  * @property {boolean} [colorLeaderboard]
  * @property {boolean} [leaderboardAvatars]
+ * @property {boolean} [twitchPictures]
  * @property {boolean} [leaderboardPercent]
  * @property {boolean} [sendResults]               false = results stay on this PC (no season points)
  * @property {boolean} [colorCommandEnabled]
@@ -105,7 +106,7 @@ const withUiDefaults = (settings) => ({ ...settings, ui: { ...DEFAULT_UI, ...set
 // What PUT /settings receives from the page. The server merges, so this is exactly the part of /settings the page owns.
 const SETTINGS_KEYS = [
   "autoJoinStreamer", "streamerColor", "autoJoin", "ui", "bots", "customBots", "overlay", "minimap", "camera",
-  "colorLeaderboard", "leaderboardAvatars", "leaderboardPercent", "colorCommandEnabled", "colorCommand", "respawnCommandEnabled", "respawnLimit", "respawnCommand", "showCommand",
+  "colorLeaderboard", "leaderboardAvatars", "leaderboardPercent", "twitchPictures", "colorCommandEnabled", "colorCommand", "respawnCommandEnabled", "respawnLimit", "respawnCommand", "showCommand",
   "driftCommandEnabled", "driftCommand",
   "sendResults", "chaos", "colors", "perks", "twitchToken", "twitchClientId", "botOptions", "webhooks",
 ];

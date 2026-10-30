@@ -17,6 +17,7 @@ export default function NamesAndColorsCard() {
         <input type="checkbox" role="switch" checked=${settings.colorLeaderboard !== false} onChange=${(event) => saveSettings({ colorLeaderboard: event.target.checked })} />
         <span>Color names in the lobby and results lists with each car's color (the in-race leaderboard always does)</span>
       </label>
+        <label class="switch-row"><input type="checkbox" role="switch" checked=${settings.twitchPictures !== false} onChange=${(event) => saveSettings({ twitchPictures: event.target.checked })} /><span>Twitch pictures in the lobby and results (the game's driver portrait only for racers without one)</span></label>
         <label class="switch-row"><input type="checkbox" role="switch" checked=${settings.leaderboardAvatars !== false} onChange=${(event) => saveSettings({ leaderboardAvatars: event.target.checked })} /><span>Racer pictures on the in-game leaderboard</span></label>
         <label class="switch-row"><input type="checkbox" role="switch" checked=${settings.leaderboardPercent !== false} onChange=${(event) => saveSettings({ leaderboardPercent: event.target.checked })} /><span>Completion percent on the in-game leaderboard</span></label>
       <label class="switch-row">

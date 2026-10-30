@@ -143,7 +143,7 @@ static partial class Chaos
         var target = rig.Target;
         var next = SwoopStep(rig, DragonStyle, out bool attack);
         MoveDragon(rig, next, time);
-        if (attack)
+        if (attack && !ShootSpill(rig))   // an oil spill on the road gets the fireball first (Chaos.OilFire)
         {
             ShootFireball(rig, target);
             rig.Target = RandomRacer();

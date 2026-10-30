@@ -266,6 +266,7 @@ static partial class Chaos
     static partial void TickCostumes();
     static partial void TickTornado();
     static partial void TickBlackHole();
+    static partial void TickUmaDrivers();
     static partial void ResetFire();
     static partial void ResetHoles();
     static partial void ResetCostumes();
@@ -278,6 +279,7 @@ static partial class Chaos
         TickCostumes();
         TickTornado();
         TickBlackHole();
+        TickUmaDrivers();
     }
 
     static void ResetEvents()

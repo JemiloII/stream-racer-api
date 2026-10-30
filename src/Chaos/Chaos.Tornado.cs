@@ -15,9 +15,9 @@ static partial class Chaos
     const float TornadoSway = 9f;               // m it swings left/right across the road
     const float TornadoSwayPeriod = 7f;         // s for one full swing
     const float TornadoFollow = 2f;             // how quickly the base catches up with its wandering target (1/s)
-    const float TornadoReach = 18f;             // a car whose centre is this close (flat) feels the wind
+    const float TornadoReach = 21f;             // a car whose centre is this close (flat) feels the wind
     const float TornadoCore = 3.5f;             // the radius cars are dragged in to and orbit at
-    const float TornadoInward = 9f;             // m/s pull toward that orbit, at the edge of the reach
+    const float TornadoInward = 12.5f;          // m/s pull toward that orbit, at the edge of the reach
     const float TornadoSwirl = 16f;             // m/s around the axis near the core
     const float TornadoLift = 7f;               // m/s upward once a car is well inside
     const float TornadoGrip = 2.5f;             // how fast a car's velocity is steered to the wind's (1/s)

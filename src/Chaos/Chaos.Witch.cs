@@ -111,6 +111,8 @@ static partial class Chaos
 
     // ---- costume: surfing skeleton ----
 
+    const float SkeletonScale = 1.25f;   // the rider, relative to the board
+
     // A white skeleton riding a surfboard sideways, arms out, swaying with the waves.
     static System.Action<float, float> BuildSkeleton(Transform model)
     {
@@ -119,6 +121,7 @@ static partial class Chaos
         Prim(PrimitiveType.Cube, ride, new Vector3(0f, 0.17f, 0f), new Vector3(0.12f, 0.12f, 3.6f), Color.white);
         var surfer = Holder("surfer", ride);
         surfer.localPosition = Vector3.up * 0.22f;
+        surfer.localScale = Vector3.one * SkeletonScale;
         BuildSkeletonLegs(surfer);
         BuildSkeletonChest(surfer);
         var arms = new[]

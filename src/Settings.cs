@@ -52,6 +52,7 @@ static class Settings
         public Dictionary<string, BotOpts> botOptions = new(); // per bot login: autoBoost (default true)
         public List<Webhook> webhooks = new();                  // fire an HTTP request when an event happens (race_end -> your bot)
         public bool colorLeaderboard = true;   // in-game leaderboard names in each car's color
+        public bool twitchPictures = true;     // lobby/results rows: Twitch picture; the game's driver portrait only for racers without one
         public bool leaderboardAvatars = true; // picture on each in-game leaderboard row
         public bool leaderboardPercent = true; // completion percent on each in-game leaderboard row
         public bool colorCommandEnabled = true; // viewers can set their own color from chat
@@ -66,6 +67,7 @@ static class Settings
         public bool chatReplies = true; // confirm chat commands in Twitch chat through the game's own connection (Game.SayInChat)
         public CameraOpts camera = new(); // director shot toggles: camera.shots.{grid,high,side,sweep,pack,front,chase,orbit,overhead,prop,finish,duel,pileup,boom}
         public Dictionary<string, string> colors = new(); // login -> hex, persisted; applied whenever they join
+        public List<int> hiddenMaps = new() { 889 };   // map ids never raced again (/lobby, next map, the Play tab queue)
         public Dictionary<string, string> umas = new();   // login -> uma chara id (!race uma <name>), used in Uma races
         public Perks perks = new();
         public ChaosOpts chaos = new();   // random events: meteors, dragon, tornado, raid, witch, magical girl, black hole
@@ -155,7 +157,7 @@ static class Settings
     public static object WithConfig() => new
     {
         Current.autoJoinStreamer, Current.streamerColor, Current.autoJoin, Current.customBots,
-        Current.colorLeaderboard, Current.leaderboardAvatars, Current.leaderboardPercent, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.showCommand, Current.respawnLimit, Current.chatReplies, Current.sendResults, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
+        Current.colorLeaderboard, Current.leaderboardAvatars, Current.leaderboardPercent, Current.twitchPictures, Current.colorCommandEnabled, Current.colorCommand, Current.respawnCommandEnabled, Current.respawnCommand, Current.showCommand, Current.respawnLimit, Current.chatReplies, Current.sendResults, Current.colors, Current.perks, Current.botOptions, Current.webhooks, Current.twitchClientId, twitchTokenSet = !string.IsNullOrEmpty(Current.twitchToken), twitch = TwitchAuth.Status(),
         Current.driftCommandEnabled, Current.driftCommand, Current.chaos,
         followerChecks = Game.FollowerChecks, followerChecksError = Game.FollowerCheckError, camera = Current.camera, Current.ui, Current.overlay, minimap = Minimap.State, bots = Bots,
         config = ConfigDto(),

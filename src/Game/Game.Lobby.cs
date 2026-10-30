@@ -56,7 +56,7 @@ static partial class Game
         Instances.MapApi.FetchMaps(response =>
         {
             _mapsLoading = false;
-            Maps = response?.Maps?.ToList() ?? new List<MapOverviewListItem>();
+            Maps = response?.Maps?.Where(map => !Settings.Current.hiddenMaps.Contains(map.ID)).ToList() ?? new List<MapOverviewListItem>();
             then?.Invoke(Maps);
         });
     }

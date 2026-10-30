@@ -43,6 +43,11 @@ static class Patches
         {
             return;
         }
+        if (Game.Login(__instance) == Game.StreamerLogin)
+        {
+            Plugin.Log.LogInfo("streamer boost from: " + string.Join(" < ", new System.Diagnostics.StackTrace().GetFrames()
+                .Skip(1).Take(6).Select(frame => frame.GetMethod()?.DeclaringType?.Name + "." + frame.GetMethod()?.Name)));
+        }
         Plugin.Emit("boost", Game.EventDto(__instance));
         Chaos.OnBoost(__instance);   // in an Uma race: the girl's "Boost" skill pop-up
     }
@@ -180,14 +185,35 @@ static class Patches
         }
     }
 
-    // The game's Twitch-avatar loader (string id, RawImage target): skip it for rows we own.
+    // Each join reply's driver portrait, by login (Chaos.UmaDriver tells customised drivers from generated ones by it).
+    [HarmonyPatch(typeof(DriverPortraits), GameNames.PortraitStoreAdd)]
+    static class RememberPortrait
+    {
+        static void Postfix(RacerProfile __0, Cage.StreamRacer.Drivers.DriverPortrait __1) => Chaos.NotePortrait(__0, __1);
+    }
+
+    // Every "next map in queue" (ours, the Play tab's, the post-race next) skips settings.hiddenMaps.
+    [HarmonyPatch(typeof(MapQueueGame), GameNames.MapQueueLoadNext)]
+    static class SkipHiddenMaps
+    {
+        static void Prefix() => MapQueue.SkipHidden();
+    }
+
+    // The game's avatar painter (RawImage target, RacerProfile, DriverPortrait, ...; since game 2.7 it shows the driver
+    // portrait, else the Twitch picture): skip it for rows we own.
     [HarmonyPatch]
     static class GameAvatarLoader
     {
         static IEnumerable<MethodBase> TargetMethods() =>
-            typeof(AvatarLoader).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                .Where(method => { var parameters = method.GetParameters(); return parameters.Length == 2 && parameters[0].ParameterType == typeof(string) && parameters[1].ParameterType == typeof(UnityEngine.UI.RawImage); });
+            typeof(AvatarLoader).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(method => { var parameters = method.GetParameters(); return parameters.Length >= 2 && parameters[0].ParameterType == typeof(UnityEngine.UI.RawImage) && parameters[1].ParameterType == typeof(RacerProfile); });
 
-        static bool Prefix(object[] __args) => !Game.HasCustomImage(__args[1] as UnityEngine.UI.RawImage);
+        static bool Prefix(MethodBase __originalMethod, object[] __args)
+        {
+            var target = __args[0] as UnityEngine.UI.RawImage;
+            if (!Game.HasCustomImage(target)) return true;
+            Game.RememberPainter(target, __originalMethod, __args);
+            return false;
+        }
     }
 }

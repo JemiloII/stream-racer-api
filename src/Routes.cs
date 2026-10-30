@@ -165,6 +165,8 @@ static class Routes
                 .OrderBy(shader => shader.name)
                 .ToList();
         }
+        if (method == "POST" && root == "find" && target == "oil") return new { ok = RenamedMethods.BeginOilSpill("dev") }; // dev aid: the game's oil spill, to test burning oil
+        if (method == "GET" && root == "find" && target == "drivers") return Chaos.DriverReport(); // dev aid: who gets an Uma driver and why
         if (method == "GET" && root == "find") // dev aid: GameObjects whose name contains q, with path + components + text
         {
             string needle = (query["q"] ?? "").ToLowerInvariant(); int max = int.TryParse(query["max"], out var parsedMax) ? parsedMax : 80;

@@ -260,16 +260,82 @@ static partial class Chaos
 
     // ---- siren ----
 
-    // An air-raid siren, made here rather than shipped: two wails, each winding up to its top note, holding and
+    // Fallback air-raid siren, made here: two wails, each winding up to its top note, holding and
     // winding down. A rotor siren is a buzzy tone (odd harmonics) with a fast flutter from the chopping rotor.
     const int SirenRate = 22050;
     const float SirenSeconds = 14f, SirenVolume = 0.35f;
     const float SirenLow = 140f, SirenHigh = 620f;      // Hz: wound down / full speed
     static AudioClip _siren;
 
+    // The real thing: a recorded pneumatic air-raid siren ("Pneumatic Air Raid Siren.wav" by Glosome, Wikimedia
+    // Commons, CC BY-SA 4.0), fetched once into the BepInEx cache; the made-up one above plays until it is there.
+    const string SirenUrl = "https://upload.wikimedia.org/wikipedia/commons/a/a6/Pneumatic_Air_Raid_Siren.wav";
+    static string SirenFile => System.IO.Path.Combine(BepInEx.Paths.CachePath, "shibiko.streamracer.siren.wav");
+    static AudioClip _realSiren;
+    static Wav.Samples _sirenSamples;
+    static bool _sirenFetching;
+
+    static AudioClip RealSiren()
+    {
+        if (_realSiren != null)
+        {
+            return _realSiren;
+        }
+        if (_sirenSamples != null)
+        {
+            return _realSiren = Wav.Clip(_sirenSamples, "sr-siren-real");
+        }
+        if (!_sirenFetching)
+        {
+            _sirenFetching = true;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ => LoadRealSiren());
+        }
+        return null;
+    }
+
+    // Off the main thread: download (first time only), decode, keep SirenSeconds of it, fade out, peak at 0.9.
+    static void LoadRealSiren()
+    {
+        try
+        {
+            if (!System.IO.File.Exists(SirenFile))
+            {
+                var web = new System.Net.WebClient();
+                web.Headers["User-Agent"] = "StreamRacerApi (https://github.com/JemiloII/stream-racer-api)";
+                web.DownloadFile(SirenUrl, SirenFile + ".part");
+                System.IO.File.Move(SirenFile + ".part", SirenFile);
+            }
+            var samples = Wav.Decode(System.IO.File.ReadAllBytes(SirenFile));
+            if (samples == null)
+            {
+                System.IO.File.Delete(SirenFile);
+                return;
+            }
+            int keep = System.Math.Min(samples.Data.Length, (int)(SirenSeconds * samples.Rate) * samples.Channels);
+            var data = new float[keep];
+            float peak = 0.0001f;
+            for (int index = 0; index < keep; index++)
+            {
+                peak = System.Math.Max(peak, System.Math.Abs(samples.Data[index]));
+            }
+            int fade = (int)(1.5f * samples.Rate) * samples.Channels;
+            for (int index = 0; index < keep; index++)
+            {
+                float tail = System.Math.Min(1f, (keep - index) / (float)fade);
+                data[index] = samples.Data[index] / peak * 0.9f * tail;
+            }
+            samples.Data = data;
+            _sirenSamples = samples;
+        }
+        catch (System.Exception error)
+        {
+            Plugin.Log.LogWarning("siren download failed, using the made-up one: " + error.Message);
+        }
+    }
+
     public static void Siren()
     {
-        _siren ??= MakeSiren();
+        _siren = RealSiren() ?? (_siren != null && _siren.name == "sr-siren" ? _siren : MakeSiren());
         var source = Root.AddComponent<AudioSource>();   // goes with the chaos root on a clear
         source.clip = _siren;
         source.volume = SirenVolume;
