@@ -13,6 +13,7 @@ static partial class Cam
 
     static Transform _plane;
     static Vector3? _planeFrom;                 // set: stand here and look at _plane instead of riding behind it
+    static System.Func<Vector3?> _planeFocus;   // set: what the plane is after (its target car), kept in frame past it
     static CameraMode _beforePlaneMode;
     static Vehicle _beforePlaneFollow;          // the car the game's follow cam was on, if it was on one
     static bool _beforePlaneFree;
@@ -24,9 +25,10 @@ static partial class Cam
     public static bool OnEventCam(string label) => OnPlane && Target == label;
 
     // Ride behind `plane` (or, with `from`, watch it from there) until EndPlaneCam. A second call just switches.
-    public static bool PlaneCam(Transform plane, string label = "air raid", Vector3? from = null)
+    public static bool PlaneCam(Transform plane, string label = "air raid", Vector3? from = null, System.Func<Vector3?> focus = null)
     {
         _planeFrom = from;
+        _planeFocus = focus;
         if (plane == null || !On("plane") || !Ready)
         {
             return false;
@@ -112,6 +114,17 @@ static partial class Cam
         {
             wanted = _planeFrom.Value;
             lookAt = _plane.position;
+            return true;
+        }
+        var focus = _planeFocus?.Invoke();
+        if (focus.HasValue)
+        {
+            // over the plane's shoulder at its car: camera on the far side of the plane from the car, looking
+            // between them, so the road and the target stay in frame through climbs and turns
+            var toCar = focus.Value - _plane.position;
+            var away = toCar.sqrMagnitude > 1f ? toCar.normalized : _plane.forward;
+            wanted = _plane.position - away * PlaneBehind + Vector3.up * PlaneAbove;
+            lookAt = Vector3.Lerp(_plane.position, focus.Value, 0.6f);
             return true;
         }
         var forward = _plane.forward;

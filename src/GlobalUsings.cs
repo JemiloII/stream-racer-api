@@ -40,6 +40,7 @@ global using ChaosEffectStatus = BCAJBHNFGPP;        // the game's chaos banner 
 global using VirtualSafetyCarController = IHIAOHCHHGC;
 global using OilSpillController = HPIBDMGLKDB;
 global using OilSpill = NINEDFKCFHK;                 // one spill patch on the road (child of OilSpillController, ~25 s)
+global using DriverSeats = KBDMANCHFOB;             // game 2.7: builds and seats every car's driver; holds the DriverLibrary
 global using DriverPortraits = PODINHDAOOK;         // game 2.7: driver portrait store (one per racer, from the join reply)
 global using MinimapCapture = DGIEGMKMLKL;          // the map's top-down road picture (a RenderTexture) + its world projection
 

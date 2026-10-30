@@ -8,8 +8,9 @@ namespace StreamRacerApi;
 static partial class Chaos
 {
     const string UmaDriverName = "sr-uma-driver";
-    const float SeatedShare = 0.62f;
-    const float EarTipAllowance = 0.04f;   // the ear mesh runs this far (model metres) past its last bone   // her seated height (hips to crown) as a share of the game driver's box height
+    const float LegSlack = 1.15f;      // leg length / seat-to-pedals distance: knees stay a little bent
+    const float HipAboveSeat = 0.06f;  // her hip joint sits this far above the game's seat point
+    const float EarTipAllowance = 0.04f;   // the ear mesh runs this far (model metres) past its last bone
 
     // Which girl drives this car: her own pick, else a fixed girl per login when the racer kept the default driver,
     // else nobody (their customised driver stays).
@@ -29,6 +30,15 @@ static partial class Chaos
     }
 
     static float _nextUmaDriverCheck;
+
+    // The game's seat for this car model (body "b" variant when there are two): seat point, wheel grips, pedals.
+    static Cage.StreamRacer.Drivers.DriverPose SeatPoseOf(Vehicle vehicle)
+    {
+        var seats = RenamedMethods.DriverLibrary()?.VehicleSeats;
+        int type = (int)vehicle.Type();
+        var variants = seats != null && type < seats.Length ? seats[type]?.Variants : null;
+        return variants == null || variants.Length == 0 ? null : variants[variants.Length - 1];
+    }
     static readonly Dictionary<string, Cage.StreamRacer.Drivers.DriverPortrait> _portraits = new();
 
     // ponytail: the backend generates every racer a driver (portrait revision 1); each save on the game's site bumps the
@@ -50,6 +60,9 @@ static partial class Chaos
         car = vehicle.Car()?.name,
         seat = vehicle.Car()?.transform.Find("Driver") != null,
         custom = HasCustomDriver(Game.Login(vehicle) ?? ""),
+        pose = SeatPoseOf(vehicle) is Cage.StreamRacer.Drivers.DriverPose pose
+            ? $"pos {pose.Position} wrapPos {pose.WrapperPosition} root {pose.RootPosition} scale {pose.Scale} wrapScale {pose.WrapperScale} seat {pose.SeatPoint} grips {pose.LeftGrip} {pose.RightGrip} pedals {pose.LeftPedal} {pose.RightPedal}"
+            : null,
         portrait = _portraits.TryGetValue(Game.Login(vehicle) ?? "", out var portrait) ? Newtonsoft.Json.JsonConvert.SerializeObject(portrait) : "none",
         uma = UmaDriverFor(vehicle),
         box = vehicle.Car()?.transform.Find("Driver") is Transform seat ? GameDriverBox(seat)?.ToString() : null,
@@ -103,7 +116,7 @@ static partial class Chaos
             }
             return;
         }
-        if (current == null && !BuildUmaDriver(seat, key))
+        if (current == null && !BuildUmaDriver(seat, key, vehicle))
         {
             return;
         }
@@ -171,10 +184,11 @@ static partial class Chaos
         }
     }
 
-    static bool BuildUmaDriver(Transform seat, string key)
+    static bool BuildUmaDriver(Transform seat, string key, Vehicle vehicle)
     {
         var box = GameDriverBox(seat);
-        var template = box == null ? null : UmaTemplateFor(key);
+        var pose = SeatPoseOf(vehicle);
+        var template = box == null || pose == null ? null : UmaTemplateFor(key);
         if (template == null)
         {
             return false;
@@ -188,8 +202,7 @@ static partial class Chaos
         OnUmaLayer(uma);
         System.Action face = template.Real ? RealLookFor(uma, null) : null;
         StandingPose(uma.transform, key);
-        SitDown(uma.transform);
-        FitToSeat(uma.transform, box.Value);
+        SeatOnPose(uma.transform, seat, pose, box.Value.max.y);
         if (face != null)
         {
             holder.gameObject.AddComponent<UmaDriverFace>().Feed = face;
@@ -197,22 +210,62 @@ static partial class Chaos
         return true;
     }
 
-    // Seated: thighs forward, shins down to the pedals, upper arms forward and down, forearms up to the wheel.
-    static void SitDown(Transform uma)
+    // The game's seat pose (seat-node space): hips on its seat point, sized so her legs reach its pedals, ears under
+    // the game driver's head line, then legs bent to the pedals and hands on the wheel grips.
+    static void SeatOnPose(Transform uma, Transform seat, Cage.StreamRacer.Drivers.DriverPose pose, float headLine)
     {
         var bones = uma.GetComponentsInChildren<Transform>(true)
             .GroupBy(bone => bone.name)
             .ToDictionary(group => group.Key, group => group.First());
         Transform Bone(string name) => bones.TryGetValue(name, out var bone) ? bone : null;
-        Vector3 Local(float x, float y, float z) => uma.TransformDirection(new Vector3(x, y, z).normalized);
-        foreach (var side in new[] { ("L", 1f), ("R", -1f) })
+        var hip = Bone("Hip");
+        if (hip == null || Bone("Thigh_L") == null || Bone("Knee_L") == null || Bone("Ankle_L") == null)
         {
-            float outward = side.Item2;   // +x is her left
-            Aim(Bone("Thigh_" + side.Item1), Bone("Knee_" + side.Item1), Local(0.1f * outward, 0.08f, 1f));
-            Aim(Bone("Knee_" + side.Item1), Bone("Ankle_" + side.Item1), Local(0f, -0.55f, 1f));
-            Aim(Bone("Arm_" + side.Item1), Bone("Elbow_" + side.Item1), Local(0.25f * outward, -0.75f, 0.6f));
-            Aim(Bone("Elbow_" + side.Item1), Bone("Wrist_" + side.Item1), Local(-0.3f * outward, 0.35f, 1f));
+            return;
         }
+        var holder = uma.parent;
+        float leg = Vector3.Distance(Bone("Thigh_L").position, Bone("Knee_L").position)
+            + Vector3.Distance(Bone("Knee_L").position, Bone("Ankle_L").position);
+        float reach = Vector3.Distance(pose.SeatPoint, (pose.LeftPedal + pose.RightPedal) * 0.5f);
+        uma.localScale *= reach * LegSlack / Mathf.Max(0.01f, holder.InverseTransformVector(Vector3.up * leg).magnitude);
+        uma.localPosition += pose.SeatPoint + Vector3.up * HipAboveSeat - holder.InverseTransformPoint(hip.position);
+        KeepEarsUnder(uma, hip, headLine);
+        // which of her sides is the seat's left (-x): her _L bones may sit on either side of the model
+        bool leftIsMinusX = holder.InverseTransformPoint(Bone("Thigh_L").position).x < holder.InverseTransformPoint(Bone("Thigh_R").position).x;
+        foreach (var side in new[] { "L", "R" })
+        {
+            bool seatLeft = (side == "L") == leftIsMinusX;
+            var pedal = seat.TransformPoint(seatLeft ? pose.LeftPedal : pose.RightPedal);
+            var grip = seat.TransformPoint(seatLeft ? pose.LeftGrip : pose.RightGrip);
+            var outward = seat.TransformDirection(seatLeft ? Vector3.left : Vector3.right);
+            var thigh = Bone("Thigh_" + side);
+            ReachWith(thigh, Bone("Knee_" + side), Bone("Ankle_" + side), pedal,
+                thigh.position + seat.TransformDirection(Vector3.forward + Vector3.up));
+            var arm = Bone("Arm_" + side);
+            ReachWith(arm, Bone("Elbow_" + side), Bone("Wrist_" + side), grip,
+                arm.position + outward * 0.5f - seat.up * 0.5f);
+        }
+    }
+
+    // Two-bone IK: turns root and mid so `end` lands on `target`, bending toward `pole` (all world space).
+    static void ReachWith(Transform root, Transform mid, Transform end, Vector3 target, Vector3 pole)
+    {
+        if (root == null || mid == null || end == null)
+        {
+            return;
+        }
+        var start = root.position;
+        float upper = Vector3.Distance(start, mid.position);
+        float lower = Vector3.Distance(mid.position, end.position);
+        var toTarget = target - start;
+        float distance = Mathf.Clamp(toTarget.magnitude, 0.01f, (upper + lower) * 0.999f);
+        var direction = toTarget.normalized;
+        var bend = Vector3.ProjectOnPlane(pole - start, direction);
+        bend = bend.sqrMagnitude > 1e-6f ? bend.normalized : Vector3.up;
+        float cosine = Mathf.Clamp((upper * upper + distance * distance - lower * lower) / (2f * upper * distance), -1f, 1f);
+        var joint = start + direction * (upper * cosine) + bend * (upper * Mathf.Sqrt(1f - cosine * cosine));
+        Aim(root, mid, joint - start);
+        Aim(mid, end, start + direction * distance - mid.position);
     }
 
     // Turn `bone` so its child lies along `direction` (world).
@@ -223,25 +276,6 @@ static partial class Chaos
             return;
         }
         bone.rotation = Quaternion.FromToRotation(child.position - bone.position, direction) * bone.rotation;
-    }
-
-    // Same size and spot as the game's driver: crown at the top of its box, hips centred over its seat.
-    static void FitToSeat(Transform uma, Bounds box)
-    {
-        var hip = uma.GetComponentsInChildren<Transform>(true).FirstOrDefault(bone => bone.name == "Hip");
-        var head = uma.GetComponentsInChildren<Transform>(true).FirstOrDefault(bone => bone.name == "Head");
-        if (hip == null || head == null)
-        {
-            return;
-        }
-        var holder = uma.parent;
-        float seated = holder.InverseTransformPoint(head.position).y - holder.InverseTransformPoint(hip.position).y;
-        uma.localScale *= box.size.y * SeatedShare / Mathf.Max(0.01f, seated * 1.25f);   // head bone sits ~1/5 below her crown
-        var hipNow = holder.InverseTransformPoint(hip.position);
-        var headNow = holder.InverseTransformPoint(head.position);
-        float crown = headNow.y + (headNow.y - hipNow.y) * 0.25f;
-        uma.localPosition += new Vector3(box.center.x - hipNow.x, box.max.y - crown, box.center.z - hipNow.z);
-        KeepEarsUnder(uma, hip, box.max.y);
     }
 
     // Her ears stand above her crown: shrink her about her hips until the tips are under the game driver's head line

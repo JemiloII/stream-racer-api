@@ -10,20 +10,23 @@ static partial class Chaos
 {
     const float TornadoSeconds = 20f;           // on the ground this long (plus touch-down and lift-off)
     const float TornadoTouchSeconds = 2f;       // the funnel grows down from the cloud / pulls back up this long
-    const float TornadoAhead = 70f;             // touches down this far along the route ahead of the leader
+    const float TornadoAhead = 40f;             // touches down this far along the route ahead of the leader
     const float TornadoDrift = 4f;              // m/s it wanders back along the route, toward the pack
     const float TornadoSway = 9f;               // m it swings left/right across the road
     const float TornadoSwayPeriod = 7f;         // s for one full swing
+    const float TornadoHunt = 32f;              // m/s it chases the nearest car within TornadoHuntRange
+    const float TornadoHuntRange = 250f;
     const float TornadoFollow = 2f;             // how quickly the base catches up with its wandering target (1/s)
-    const float TornadoReach = 30f;             // a car whose centre is this close (flat) feels the wind
-    const float TornadoCore = 3.5f;             // the radius cars are dragged in to and orbit at
-    const float TornadoInward = 20f;            // m/s pull toward that orbit, at the edge of the reach
-    const float TornadoSwirl = 16f;             // m/s around the axis near the core
-    const float TornadoLift = 7f;               // m/s upward once a car is well inside
-    const float TornadoGrip = 4f;               // how fast a car's velocity is steered to the wind's (1/s)
-    const float TornadoHold = 0.35f;            // top speed share a car keeps inside the reach (its engine can't drive out)
-    const float TornadoSpin = 5f;               // rad/s the car spins about itself near the core
-    const float TornadoFlingHeight = 17f;       // this high above the base it is thrown out and booms
+    const float TornadoReach = 45f;             // a car whose centre is this close (flat) feels the wind
+    const float TornadoCore = 5f;               // the radius cars are dragged in to and orbit at
+    const float TornadoInward = 30f;            // m/s pull toward that orbit, at the edge of the reach
+    const float TornadoSwirl = 48f;             // m/s around the axis near the core
+    const float TornadoLift = 11f;              // m/s upward once a car is well inside
+    const float TornadoGrip = 6f;               // how fast a car's velocity is steered to the wind's (1/s)
+    const float TornadoLiftFrom = 22f;          // m from the axis where the updraft starts lifting cars
+    const float TornadoHold = 0.1f;             // top speed share a car keeps inside the reach (its engine can't drive out)
+    const float TornadoSpin = 14f;              // rad/s the car spins about itself near the core
+    const float TornadoFlingHeight = 36f;       // this high above the base it is thrown out and booms
     const float TornadoFlingSpeed = 26f;        // m/s outward when thrown
     const float TornadoFlingUp = 8f;            // m/s upward when thrown
     const float TornadoRecatch = 6f;            // a thrown car is left alone this long
@@ -95,7 +98,18 @@ static partial class Chaos
             }
             float along = Mathf.Max(0f, time - TornadoTouchSeconds);
             var target = TornadoSpot(startDistance - TornadoDrift * along, along);
-            holder.position = Vector3.Lerp(holder.position, target, Mathf.Clamp01(TornadoFollow * Time.deltaTime));
+            var prey = TornadoPrey(holder.position);
+            if (prey.HasValue)
+            {
+                // it hunts: heads for the nearest car it isn't already holding, a little slower than a car drives
+                target = holder.position + Vector3.ClampMagnitude(prey.Value - holder.position, TornadoHunt * Time.deltaTime);
+                target.y = Ground(target).y;
+                holder.position = target;
+            }
+            else
+            {
+                holder.position = Vector3.Lerp(holder.position, target, Mathf.Clamp01(TornadoFollow * Time.deltaTime));
+            }
             TornadoSpinFunnel(funnel, time);
             TornadoSpinDebris(chunks, grown);
             yield return null;
@@ -264,6 +278,8 @@ static partial class Chaos
         }
     }
 
+    // Dragged in along the ground, then carried round and up the funnel on a circle that widens with height the way
+    // the funnel does, spinning, until it is thrown out near the top.
     static void TornadoPullCar(Vehicle vehicle, Rigidbody body, Vector3 axis, float deltaTime)
     {
         var offset = body.position - axis;
@@ -279,18 +295,24 @@ static partial class Chaos
             TornadoFling(vehicle, body, outward);
             return;
         }
+        float height = Mathf.Max(0f, offset.y);
+        // the funnel's own width at this height (same curve it is drawn with), never tighter than the core
+        float orbit = Mathf.Max(TornadoCore, Mathf.Lerp(TornadoBaseRadius, TornadoTopRadius, Mathf.Pow(Mathf.Clamp01(height / TornadoHeight), 2.2f)));
         float closeness = 1f - distance / TornadoReach;
         var around = Vector3.Cross(Vector3.up, outward);
-        float inwardShare = Mathf.Clamp((distance - TornadoCore) / (TornadoReach - TornadoCore), -0.5f, 1f);
-        float liftShare = Mathf.Clamp01((TornadoReach * 0.7f - distance) / (TornadoReach * 0.7f - TornadoCore));
-        var wind = around * TornadoSwirl * (0.4f + 0.6f * closeness) - outward * TornadoInward * inwardShare
+        float inwardShare = Mathf.Clamp((distance - orbit) / Mathf.Max(1f, TornadoReach - orbit), -0.5f, 1f);
+        float liftShare = Mathf.Clamp01((TornadoLiftFrom - distance) / Mathf.Max(1f, TornadoLiftFrom - orbit));
+        var wind = around * TornadoSwirl * (0.4f + 0.6f * Mathf.Max(closeness, liftShare))
+            - outward * TornadoInward * inwardShare
             + Vector3.up * TornadoLift * liftShare;
-        float steer = Mathf.Clamp01(TornadoGrip * (0.6f + 0.4f * closeness) * deltaTime);
+        // in the funnel the wind owns the car outright; outside it the car is steered toward the wind
+        float steer = distance < orbit * 1.6f ? 1f : Mathf.Clamp01(TornadoGrip * (0.6f + 0.4f * closeness) * deltaTime);
         Game.Speed(vehicle, TornadoHold, 0.5f);
         var velocity = body.velocity;
         velocity += (wind - velocity) * steer;
         velocity -= Physics.gravity * deltaTime * liftShare;
         body.velocity = velocity;
+        body.maxAngularVelocity = Mathf.Max(body.maxAngularVelocity, TornadoSpin * 1.5f);   // Unity caps spin at 7 rad/s
         var spin = new Vector3(Mathf.Sin(Time.time * 3f), 1f, Mathf.Cos(Time.time * 2f)) * TornadoSpin * liftShare;
         body.angularVelocity = Vector3.Lerp(body.angularVelocity, spin, steer);
     }
@@ -311,6 +333,28 @@ static partial class Chaos
             login = Game.Login(vehicle),
             displayName = Game.DisplayName(vehicle),
         });
+    }
+
+    // The nearest racing car within hunting range that is outside the funnel and not just thrown out, or null.
+    static Vector3? TornadoPrey(Vector3 from)
+    {
+        Vector3? best = null;
+        float bestDistance = TornadoHuntRange;
+        foreach (var vehicle in Racers())
+        {
+            if (_tornadoFreeAt.TryGetValue(vehicle, out var freeAt) && Time.time < freeAt)
+            {
+                continue;
+            }
+            var car = CarPosition(vehicle);
+            float distance = Vector2.Distance(new Vector2(car.x, car.z), new Vector2(from.x, from.z));
+            if (distance > TornadoCore * 2f && distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = car;
+            }
+        }
+        return best;
     }
 
     // ---- per frame / reset ----

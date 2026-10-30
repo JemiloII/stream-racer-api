@@ -63,7 +63,8 @@ static partial class Chaos
             bombers[index].Velocity = heading * ClimbSpeed;
             bombers[index].PeelAt = Time.time + 1.5f + index * RaidPeelGap;
         }
-        Cam.PlaneCam(bombers[0].Body);   // ride with the lead bomber (any key in the game, or the raid ending, leaves it)
+        var lead = bombers[0];
+        Cam.PlaneCam(lead.Body, focus: () => lead.Target?.Car() != null ? CarPosition(lead.Target) : null);   // ride with the lead bomber, its car in frame (any key in the game, or the raid ending, leaves it)
 
         for (float time = 0f; time < RaidMaxSeconds && squadron != null; time += Time.deltaTime)
         {

@@ -263,6 +263,7 @@ static class RenamedMethods
     public static void StopFollow(this FollowCam cam) => cam.FHIGDDOAMNL();
     public static bool IsDriving(this CarAIControl ai) => ai.EDLNGCAOGBL();
     public static bool BeginSafetyCar(string by) => VirtualSafetyCarController.KBNKPJPCCGD(by);
+    public static Cage.StreamRacer.Drivers.DriverLibrary DriverLibrary() => Object.FindObjectOfType<DriverSeats>()?.FAPBKHKLMJM;
     public static bool BeginOilSpill(string by) => OilSpillController.KBNKPJPCCGD(by);   // dev aid only (/find/oil)
 }
 
