@@ -14,16 +14,16 @@ static partial class Chaos
     const float TornadoDrift = 4f;              // m/s it wanders back along the route, toward the pack
     const float TornadoSway = 9f;               // m it swings left/right across the road
     const float TornadoSwayPeriod = 7f;         // s for one full swing
-    const float TornadoHunt = 32f;              // m/s it chases the nearest car within TornadoHuntRange
-    const float TornadoHuntRange = 250f;
+    const float TornadoHunt = 40f;              // m/s it chases the nearest car within TornadoHuntRange
+    const float TornadoHuntRange = 400f;
     const float TornadoFollow = 2f;             // how quickly the base catches up with its wandering target (1/s)
-    const float TornadoReach = 45f;             // a car whose centre is this close (flat) feels the wind
+    const float TornadoReach = 60f;             // a car whose centre is this close (flat) feels the wind
     const float TornadoCore = 5f;               // the radius cars are dragged in to and orbit at
-    const float TornadoInward = 30f;            // m/s pull toward that orbit, at the edge of the reach
+    const float TornadoInward = 40f;            // m/s pull toward that orbit, at the edge of the reach
     const float TornadoSwirl = 48f;             // m/s around the axis near the core
     const float TornadoLift = 11f;              // m/s upward once a car is well inside
-    const float TornadoGrip = 6f;               // how fast a car's velocity is steered to the wind's (1/s)
-    const float TornadoLiftFrom = 22f;          // m from the axis where the updraft starts lifting cars
+    const float TornadoGrip = 9f;               // how fast a car's velocity is steered to the wind's (1/s)
+    const float TornadoLiftFrom = 30f;          // m from the axis where the updraft starts lifting cars
     const float TornadoHold = 0.1f;             // top speed share a car keeps inside the reach (its engine can't drive out)
     const float TornadoSpin = 14f;              // rad/s the car spins about itself near the core
     const float TornadoFlingHeight = 36f;       // this high above the base it is thrown out and booms
@@ -43,7 +43,8 @@ static partial class Chaos
         new(0.62f, 0.62f, 0.64f, 0.26f),
         new(0.42f, 0.43f, 0.45f, 0.36f),
     };
-    static readonly Color TornadoCloudColor = new(0.22f, 0.23f, 0.26f);
+    static readonly Color TornadoCloudColor = new(0.2f, 0.21f, 0.24f, 0.22f);   // unlit and see-through (each puff)
+    const int TornadoCloudPuffs = 7;
     static readonly Color TornadoDust = new(0.55f, 0.48f, 0.38f, 0.7f);
     static readonly Color TornadoDebrisColor = new(0.32f, 0.24f, 0.16f, 1f);
     static readonly Color TornadoMist = new(0.6f, 0.61f, 0.63f, 0.45f);
@@ -116,6 +117,10 @@ static partial class Chaos
         }
         _tornadoStrength = 0f;
         _tornadoBase = null;
+        foreach (var body in _tornadoGhosts.ToList())
+        {
+            TornadoSolid(body);   // anything still up there falls as a solid car again
+        }
         if (holder != null)
         {
             TornadoStopStreams(streams);
@@ -147,8 +152,14 @@ static partial class Chaos
     {
         var cloud = Holder("tornado-cloud", holder);
         cloud.localPosition = Vector3.up * TornadoHeight;
-        Prim(PrimitiveType.Sphere, cloud, Vector3.zero, new Vector3(70f, 8f, 70f), TornadoCloudColor);
-        Prim(PrimitiveType.Sphere, cloud, new Vector3(14f, 3f, -9f), new Vector3(46f, 7f, 40f), TornadoCloudColor);
+        // see-through puffs, so a zoomed camera still sees the cars spinning up into it
+        for (int puff = 0; puff < TornadoCloudPuffs; puff++)
+        {
+            float angle = puff * Mathf.PI * 2f / TornadoCloudPuffs;
+            float spread = puff == 0 ? 0f : 22f;
+            Prim(PrimitiveType.Sphere, cloud, new Vector3(Mathf.Cos(angle) * spread, Random.Range(-2f, 3f), Mathf.Sin(angle) * spread),
+                new Vector3(Random.Range(30f, 44f), Random.Range(6f, 10f), Random.Range(30f, 44f)), TornadoCloudColor, glow: true);
+        }
         var funnel = Holder("tornado-funnel", holder);
         funnel.localPosition = Vector3.up * TornadoHeight;
         float thickness = TornadoHeight / TornadoLayers * 1.2f;
@@ -287,6 +298,7 @@ static partial class Chaos
         float distance = flat.magnitude;
         if (distance > TornadoReach || offset.y < -3f)
         {
+            TornadoSolid(body);
             return;
         }
         var outward = distance > 0.01f ? flat / distance : Vector3.right;
@@ -306,7 +318,17 @@ static partial class Chaos
             - outward * TornadoInward * inwardShare
             + Vector3.up * TornadoLift * liftShare;
         // in the funnel the wind owns the car outright; outside it the car is steered toward the wind
-        float steer = distance < orbit * 1.6f ? 1f : Mathf.Clamp01(TornadoGrip * (0.6f + 0.4f * closeness) * deltaTime);
+        bool inFunnel = distance < orbit * 1.6f;
+        float steer = inFunnel ? 1f : Mathf.Clamp01(TornadoGrip * (0.6f + 0.4f * closeness) * deltaTime);
+        if (inFunnel && body.detectCollisions)
+        {
+            body.detectCollisions = false;   // glued to the wind: buildings and walls don't catch it on the way up
+            _tornadoGhosts.Add(body);
+        }
+        else if (!inFunnel)
+        {
+            TornadoSolid(body);
+        }
         Game.Speed(vehicle, TornadoHold, 0.5f);
         var velocity = body.velocity;
         velocity += (wind - velocity) * steer;
@@ -318,8 +340,19 @@ static partial class Chaos
     }
 
     // High enough: thrown out of the funnel, tumbling, and the game's boom by "tornado".
+    static readonly HashSet<Rigidbody> _tornadoGhosts = new();
+
+    static void TornadoSolid(Rigidbody body)
+    {
+        if (body != null && _tornadoGhosts.Remove(body))
+        {
+            body.detectCollisions = true;
+        }
+    }
+
     static void TornadoFling(Vehicle vehicle, Rigidbody body, Vector3 outward)
     {
+        TornadoSolid(body);
         _tornadoFreeAt[vehicle] = Time.time + TornadoRecatch;
         body.velocity = outward * TornadoFlingSpeed + Vector3.up * TornadoFlingUp;
         body.angularVelocity = Random.onUnitSphere * TornadoSpin;
@@ -375,6 +408,10 @@ static partial class Chaos
 
     static partial void ResetTornado()
     {
+        foreach (var body in _tornadoGhosts.ToList())
+        {
+            TornadoSolid(body);
+        }
         _tornadoBase = null;
         _tornadoStrength = 0f;
         _tornadoFreeAt.Clear();
