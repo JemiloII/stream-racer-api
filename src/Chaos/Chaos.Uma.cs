@@ -257,6 +257,10 @@ static partial class Chaos
                 }
                 continue;
             }
+            if (Game.Login(vehicle) == Game.StreamerLogin)
+            {
+                continue;   // the streamer's car keeps its own pace: a strategy surge looked like a boost they never used
+            }
             float done = Mathf.Clamp01(vehicle.Progress() / Mathf.Max(1f, Game.FinishDistance(vehicle)));
             Game.Speed(vehicle, StylePace(template.Style, done), UmaPaceEvery * 2f);
         }

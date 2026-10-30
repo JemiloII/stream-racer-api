@@ -109,4 +109,4 @@ BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `
 - Black hole: placed 16° up, ahead of the camera's view when it starts (by day the sun's spot if within 40° of that); it used to hang 55° up at night where race cameras never look.
 - Siren: the real recording "Pneumatic Air Raid Siren.wav" (Glosome, Wikimedia Commons, CC BY-SA 4.0) is downloaded once into `BepInEx/cache/shibiko.streamracer.siren.wav` (first 14 s, faded, normalised); the synth plays until it is there.
 - Burning oil (`Chaos.OilFire.cs`): a dragon's fireball goes for the game's own oil spills (`OilSpill` = NINEDFKCFHK, children of OilSpillController, ~25 s) first; a hit lights the spill's footprint for 20 s, then it dies down. Dev aid: `POST /find/oil` spawns a spill.
-- Streamer boosts are logged with a short call stack ("streamer boost from: …") to find what boosted the streamer's car on its own (our auto-boost skips the streamer).
+- The streamer's car is left out of Uma-race strategy pacing (a surge looked like a boost they never used). Streamer pool boosts are logged with a short call stack ("streamer boost from: …") in case another one shows up.
