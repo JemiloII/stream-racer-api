@@ -8,7 +8,8 @@ namespace StreamRacerApi;
 static partial class Chaos
 {
     const string UmaDriverName = "sr-uma-driver";
-    const float SeatedShare = 0.62f;   // her seated height (hips to crown) as a share of the game driver's box height
+    const float SeatedShare = 0.62f;
+    const float EarTipAllowance = 0.04f;   // the ear mesh runs this far (model metres) past its last bone   // her seated height (hips to crown) as a share of the game driver's box height
 
     // Which girl drives this car: her own pick, else a fixed girl per login when the racer kept the default driver,
     // else nobody (their customised driver stays).
@@ -240,6 +241,29 @@ static partial class Chaos
         var headNow = holder.InverseTransformPoint(head.position);
         float crown = headNow.y + (headNow.y - hipNow.y) * 0.25f;
         uma.localPosition += new Vector3(box.center.x - hipNow.x, box.max.y - crown, box.center.z - hipNow.z);
+        KeepEarsUnder(uma, hip, box.max.y);
+    }
+
+    // Her ears stand above her crown: shrink her about her hips until the tips are under the game driver's head line
+    // (roughly where the roof is), so they don't poke through it.
+    static void KeepEarsUnder(Transform uma, Transform hip, float top)
+    {
+        var holder = uma.parent;
+        var tips = uma.GetComponentsInChildren<Transform>(true).Where(bone => bone.name.StartsWith("Ear_03_")).ToList();
+        if (tips.Count == 0)
+        {
+            return;
+        }
+        float hipY = holder.InverseTransformPoint(hip.position).y;
+        float tipY = tips.Max(tip => holder.InverseTransformPoint(tip.position).y) + EarTipAllowance * uma.localScale.y;
+        if (tipY <= top || tipY - hipY < 0.01f)
+        {
+            return;
+        }
+        float shrink = (top - hipY) / (tipY - hipY);
+        var hipBefore = holder.InverseTransformPoint(hip.position);
+        uma.localScale *= shrink;
+        uma.localPosition += hipBefore - holder.InverseTransformPoint(hip.position);
     }
 
     // Her face material needs the head's pose every frame (real look only).

@@ -275,6 +275,8 @@ static partial class Chaos
     static Wav.Samples _sirenSamples;
     static bool _sirenFetching;
 
+    public static void PreloadSiren() => RealSiren();
+
     static AudioClip RealSiren()
     {
         if (_realSiren != null)

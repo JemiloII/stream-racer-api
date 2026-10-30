@@ -175,6 +175,7 @@ static partial class Game
     {
         var circuit = Instances.WaypointController?.GetCircuit();
         if (circuit == null) return false;
+        if (vehicle.Progress() <= 0f) return false;   // still on the start grid, which sits behind where the route line begins
         var routePosition = circuit.GetRoutePoint(vehicle.Progress()).Position();
         return Vector2.Distance(new Vector2(routePosition.x, routePosition.z), new Vector2(carTransform.position.x, carTransform.position.z)) > 18f;
     }

@@ -110,3 +110,8 @@ BepInEx plugin for Stream Racer. Port 8793 (config `api.Port`). Build/install: `
 - Siren: the real recording "Pneumatic Air Raid Siren.wav" (Glosome, Wikimedia Commons, CC BY-SA 4.0) is downloaded once into `BepInEx/cache/shibiko.streamracer.siren.wav` (first 14 s, faded, normalised); the synth plays until it is there.
 - Burning oil (`Chaos.OilFire.cs`): a dragon's fireball goes for the game's own oil spills (`OilSpill` = NINEDFKCFHK, children of OilSpillController, ~25 s) first; a hit lights the spill's footprint for 20 s, then it dies down. Dev aid: `POST /find/oil` spawns a spill.
 - The streamer's car is left out of Uma-race strategy pacing (a surge looked like a boost they never used). Streamer pool boosts are logged with a short call stack ("streamer boost from: …") in case another one shows up.
+- Raid planes fly like planes: heading turns at most `PlaneMaxTurn` (45 deg/s, 90 while lining up a dive), climbs are capped at 25 deg, they coast level 2.5 s after a drop, and drop anyway once they've passed over their car (fast planes would otherwise loop forever). Speeds 75 m/s climbing / 100 diving.
+- Off-road: a car still on the start grid (progress 0) is on the road; the grid sits 40-60 m behind where the route line begins, which used to count everyone as off-road at the start and, while it snows, bogged the whole field down in "deep snow".
+- Seated Umas are shrunk about the hips until the ear tips (`Ear_03_*` + a little) are under the game driver's head line.
+- Tornado: reach 30 m, inward 20 m/s, grip 4/s, and cars in the wind keep only 35% top speed (`TornadoHold`) so the AI can't drive out of it.
+- The real siren starts loading when the mod starts (`Chaos.PreloadSiren`), so the first raid of a session already has it.

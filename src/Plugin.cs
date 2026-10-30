@@ -16,7 +16,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.49.1"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.49.2"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
@@ -136,6 +136,7 @@ public class Plugin : BaseUnityPlugin
         var listener = _http;
         new Thread(() => Listen(listener)) { IsBackground = true }.Start();
         Logger.LogInfo($"listening on http://127.0.0.1:{Port.Value}/");
+        Chaos.PreloadSiren();   // so the first raid of the session already has the real recording
     }
 
     // Port / bind changed at runtime: drop every client (SSE included; they reconnect on their own) and rebind.

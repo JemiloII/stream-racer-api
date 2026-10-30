@@ -14,13 +14,17 @@ static partial class Chaos
     const float RaidHigh = 95f;                 // m above its target where a plane starts a dive
     const float RaidStartBehind = 140f;         // the squadron appears this far behind the last car, at RaidHigh
     const float RaidPeelGap = 0.8f;             // s between planes breaking out of the V
-    const float DiveSpeed = 58f;                // m/s in a dive
-    const float ClimbSpeed = 34f;               // m/s climbing back up
+    const float DiveSpeed = 100f;               // m/s in a dive
+    const float ClimbSpeed = 75f;               // m/s climbing back up
     const float PlaneTurnRate = 1.6f;           // how fast a plane swings its heading toward where it wants to go (1/s)
-    const float DiveFrom = 150f;                // flat distance to the target at which a climbing plane rolls in
+    const float PlaneMaxTurn = 45f;             // degrees/s at most: turning back is a ~4 s banked arc, never a flip
+    const float PlaneDiveTurn = 90f;            // degrees/s while lining up a dive on its car
+    const float PlaneMaxClimb = 25f;            // degrees: the steepest it climbs out
+    const float PlaneCoast = 2.5f;              // s it flies on after a drop before pulling round
+    const float DiveFrom = 230f;                // flat distance to the target at which a climbing plane rolls in
     const float ReleaseHeight = 24f;            // bomb away this high above the target (or when this close)
     const float PullUpFloor = 9f;               // never lower than this above the ground under it
-    const float ClimbBack = 110f;               // after a pass it climbs out to this far behind its next target
+    const float ClimbBack = 170f;               // after a pass it climbs out to this far behind its next target
     const float FormationSpacing = 9f;          // between ranks of the V, sideways and back
     const float BombBlastRadius = 6f;
     const float BombSteer = 30f;                // m/s² a falling bomb steers sideways toward its car
@@ -89,6 +93,10 @@ static partial class Chaos
         DiveSpeed = DiveSpeed,
         ClimbSpeed = ClimbSpeed,
         Turn = PlaneTurnRate,
+        MaxTurn = PlaneMaxTurn,
+        DiveTurn = PlaneDiveTurn,
+        MaxClimb = PlaneMaxClimb,
+        CoastSeconds = PlaneCoast,
         DiveFrom = DiveFrom,
         ClimbBack = ClimbBack,
         AttackHeight = ReleaseHeight,
@@ -144,7 +152,8 @@ static partial class Chaos
             {
                 var flat = Vector3.ProjectOnPlane(bomber.Velocity, Vector3.up).normalized;
                 var climb = (flat + Vector3.up * 0.6f).normalized;
-                bomber.Velocity = Vector3.Slerp(bomber.Velocity, climb * ClimbSpeed * 1.4f, 2f * Time.deltaTime);
+                var heading = Vector3.RotateTowards(bomber.Velocity.normalized, climb, PlaneMaxTurn * Mathf.Deg2Rad * Time.deltaTime, 0f);
+                bomber.Velocity = heading * Mathf.MoveTowards(bomber.Velocity.magnitude, ClimbSpeed * 1.4f, 20f * Time.deltaTime);
                 FacePlane(bomber, bomber.Velocity * Time.deltaTime);
                 bomber.Body.position += bomber.Velocity * Time.deltaTime;
                 SpinPropellers(bomber);
