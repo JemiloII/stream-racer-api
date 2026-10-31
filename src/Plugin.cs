@@ -16,7 +16,7 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.50.0"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.50.1"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
@@ -300,6 +300,7 @@ public class Plugin : BaseUnityPlugin
         if (path == "minimap") path = "minimap.html";
         if (path == "leaderboard") path = "leaderboard.html";
         if (path == "rankings") path = "rankings.html";
+        if (path == "favicon.ico") path = "icon.png";   // browsers ask for it on their own
         var extension = Path.GetExtension(path);
         if (!Mime.TryGetValue(extension, out var mime)) return false;
         var assembly = typeof(Plugin).Assembly;
