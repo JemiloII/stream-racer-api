@@ -165,6 +165,12 @@ static class Routes
                 .OrderBy(shader => shader.name)
                 .ToList();
         }
+        if (method == "POST" && root == "find" && target == "screen") // dev aid: the game's own screen, UI included, saved at the end of this frame
+        {
+            string file = System.IO.Path.Combine(BepInEx.Paths.CachePath, "sr-screen.png");
+            ScreenCapture.CaptureScreenshot(file);
+            return new { ok = true, file };
+        }
         if (method == "POST" && root == "find" && target == "oil") return new { ok = RenamedMethods.BeginOilSpill("dev") }; // dev aid: the game's oil spill, to test burning oil
         if (method == "GET" && root == "find" && target == "drivers") return Chaos.DriverReport(); // dev aid: who gets an Uma driver and why
         if (method == "GET" && root == "find") // dev aid: GameObjects whose name contains q, with path + components + text

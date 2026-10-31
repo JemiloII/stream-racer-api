@@ -54,6 +54,7 @@ export default function PluginConfigCard() {
         </label>
         <label class="switch-row" style=${{ margin: "26px 0 0" }}><input type="checkbox" role="switch" checked=${!!config.bindAll} onChange=${(event) => apply({ bindAll: event.target.checked })} /><span>Listen on all interfaces (needs a token)</span></label>
         <${KeyField} label="Boost hotkey" value=${config.hotkeyBoost || ""} onChange=${(keyName) => apply({ hotkeyBoost: keyName })} />
+        <${KeyField} label="Open this page hotkey" value=${config.hotkeyPanel || ""} onChange=${(keyName) => apply({ hotkeyPanel: keyName })} />
         <${KeyField} label="Free cam up (Q/E still work)" value=${config.camUp || ""} onChange=${(keyName) => apply({ camUp: keyName })} />
         <${KeyField} label="Free cam down" value=${config.camDown || ""} onChange=${(keyName) => apply({ camDown: keyName })} />
         <label>Positions per second (pos event)<input type="number" step="1" defaultValue=${config.posHz ?? 60} onBlur=${(event) => +event.target.value !== config.posHz && apply({ posHz: +event.target.value })} /></label>

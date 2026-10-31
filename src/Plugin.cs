@@ -16,13 +16,13 @@ namespace StreamRacerApi;
 [BepInPlugin("shibiko.streamracer.api", "StreamRacerApi", Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public const string Version = "1.49.4"; // semver, bumped by scripts/post-commit from the commit message
+    public const string Version = "1.50.0"; // semver, bumped by scripts/post-commit from the commit message
     public static string Commit =>
         typeof(Plugin).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false) is System.Reflection.AssemblyInformationalVersionAttribute[] attributes && attributes.Length > 0
             ? attributes[0].InformationalVersion : "dev";
     public static ConfigEntry<string> UpdateUrl;
     public static ConfigEntry<int> Port;
-    public static ConfigEntry<KeyCode> CamUp, CamDown, BoostKey;
+    public static ConfigEntry<KeyCode> CamUp, CamDown, BoostKey, PanelKey;
     public static ConfigEntry<float> TickHz, PosHz;
     public static ConfigEntry<string> Token;
     public static ConfigEntry<bool> BindAll;
@@ -48,6 +48,7 @@ public class Plugin : BaseUnityPlugin
         CamUp = Config.Bind("camera", "Up", KeyCode.Space, "free cam up (game's E still works)");
         CamDown = Config.Bind("camera", "Down", KeyCode.C, "free cam down (game's Q still works)");
         BoostKey = Config.Bind("hotkeys", "Boost", KeyCode.R, "use one of the streamer's own boosts (same as typing !boost)");
+        PanelKey = Config.Bind("hotkeys", "OpenControlPanel", KeyCode.F10, "open the mod's control panel (web page) in the browser");
 
         Updates.Kick();
         if (TooManyFailedLaunches())
@@ -204,6 +205,7 @@ public class Plugin : BaseUnityPlugin
         }
         while (MainThread.TryDequeue(out var action)) action();
         try { Credits.Tick(); } catch (Exception error) { if (Time.frameCount % 600 == 0) Log.LogWarning("credits: " + error.Message); }
+        try { MenuButton.Tick(); } catch (Exception error) { if (Time.frameCount % 600 == 0) Log.LogWarning("menu button: " + error.Message); }
         try { VisualsSetting.Tick(); } catch (Exception error) { if (Time.frameCount % 600 == 0) Log.LogWarning("visuals setting: " + error.Message); }
         if (Time.unscaledTime >= _nextScreen)
         {
@@ -226,6 +228,7 @@ public class Plugin : BaseUnityPlugin
         Weather.Tick();          // rain/snow particles + surface spawns (fails soft inside)
         Game.SurfacesTick();     // ice/puddles/mud/snow under each car (fails soft inside)
         Chaos.Tick();            // random chaos events (fails soft inside)
+        if (Input.GetKeyDown(PanelKey.Value)) MenuButton.OpenControlPanel();
         if (Input.GetKeyDown(BoostKey.Value))
         {
             var me = Game.StreamerVehicle();

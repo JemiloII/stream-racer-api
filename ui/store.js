@@ -94,7 +94,7 @@ import { api, withToken } from "./lib/api.js";
  * @property {string} [twitchClientId]
  * @property {boolean} [twitchTokenSet]
  * @property {object} [twitch]                        Twitch login status (GET /twitch/token)
- * @property {object} config                          plugin config: {port, tokenRequired, bindAll, hotkeyBoost, camUp, camDown, tickHz, posHz}
+ * @property {object} config                          plugin config: {port, tokenRequired, bindAll, hotkeyBoost, hotkeyPanel, camUp, camDown, tickHz, posHz}
  */
 
 /** @type {UiSettings} */

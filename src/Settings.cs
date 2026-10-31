@@ -152,7 +152,7 @@ static class Settings
         File.WriteAllText(FilePath, JsonConvert.SerializeObject(model, Formatting.Indented));
     }
 
-    public static object ConfigDto() => new { port = Plugin.Port.Value, tokenRequired = !string.IsNullOrEmpty(Plugin.Token.Value), bindAll = Plugin.BindAll.Value, tickHz = Plugin.TickHz.Value, posHz = Plugin.PosHz.Value, hotkeyBoost = Plugin.BoostKey.Value.ToString(), camUp = Plugin.CamUp.Value.ToString(), camDown = Plugin.CamDown.Value.ToString() };
+    public static object ConfigDto() => new { port = Plugin.Port.Value, tokenRequired = !string.IsNullOrEmpty(Plugin.Token.Value), bindAll = Plugin.BindAll.Value, tickHz = Plugin.TickHz.Value, posHz = Plugin.PosHz.Value, hotkeyBoost = Plugin.BoostKey.Value.ToString(), hotkeyPanel = Plugin.PanelKey.Value.ToString(), camUp = Plugin.CamUp.Value.ToString(), camDown = Plugin.CamDown.Value.ToString() };
 
     public static object WithConfig() => new
     {
@@ -203,6 +203,7 @@ static class Settings
         if (config["bindAll"] != null && (bool)config["bindAll"] != Plugin.BindAll.Value) { Plugin.BindAll.Value = (bool)config["bindAll"]; restart = true; }
         if (config["token"] != null) { var token = (string)config["token"] ?? ""; if (token != Plugin.Token.Value) { Plugin.Token.Value = token; if (Plugin.BindAll.Value) restart = true; } }
         if (config["hotkeyBoost"] != null) Plugin.BoostKey.Value = Key((string)config["hotkeyBoost"], Plugin.BoostKey.Value);
+        if (config["hotkeyPanel"] != null) Plugin.PanelKey.Value = Key((string)config["hotkeyPanel"], Plugin.PanelKey.Value);
         if (config["camUp"] != null) Plugin.CamUp.Value = Key((string)config["camUp"], Plugin.CamUp.Value);
         if (config["camDown"] != null) Plugin.CamDown.Value = Key((string)config["camDown"], Plugin.CamDown.Value);
         if (config["tickHz"] != null) Plugin.TickHz.Value = Mathf.Clamp((float)config["tickHz"], 0.5f, 60f);
