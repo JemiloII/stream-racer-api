@@ -192,6 +192,32 @@ static class Patches
         static void Postfix(RacerProfile __0, Cage.StreamRacer.Drivers.DriverPortrait __1) => Chaos.NotePortrait(__0, __1);
     }
 
+    // A racer with no Twitch account (custom bots like wa_chan) can't register with the game's server, and since game
+    // 2.7 a failed registration kicks the car. Answer for the server instead: no backend id, no title, the default car,
+    // no custom driver (so they get an Uma driver).
+    [HarmonyPatch(typeof(MapApi), GameNames.RegisterPreGame)]
+    static class RegisterAccountless
+    {
+        static bool Prefix(RacerProfile __0, System.Delegate __1)
+        {
+            if (__0 == null || !string.IsNullOrEmpty(__0.TwitchId()) || __1 == null)
+            {
+                return true;
+            }
+            __1.DynamicInvoke(new UserRegisterPreGameResponse
+            {
+                ID = 0,
+                Banned = 0,
+                TwitchUsername = __0.Login(),
+                TwitchDisplayName = __0.DisplayName(),
+                CustomTitle = "",
+                LoadoutVehicle = "regular",
+                LoadoutSkin = "",
+            });
+            return false;
+        }
+    }
+
     // Every "next map in queue" (ours, the Play tab's, the post-race next) skips settings.hiddenMaps.
     [HarmonyPatch(typeof(MapQueueGame), GameNames.MapQueueLoadNext)]
     static class SkipHiddenMaps

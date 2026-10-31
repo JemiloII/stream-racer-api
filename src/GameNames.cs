@@ -41,6 +41,7 @@ static class GameNames
     public const string ListItemName = "PJNFHJGDMPO";            // ...: the TextMeshProUGUI name
     public const string MapQueueList = "PLGOMIBLIIG";            // MapQueueGame static List<MapOverviewListItem>: the playlist
     public const string PortraitStoreAdd = "EMPPNCIOFDG";    // DriverPortraits(profile, DriverPortrait, string): a join reply's portrait
+    public const string RegisterPreGame = "APGALBFEDEJ";      // MapApi(profile, reply callback, onError): POST /UserRegisterPreGame for a join
     public const string MapQueueLoadNext = "EDKCLEFEIOE";      // MapQueueGame static: build the lobby for the next queued map
     public const string MapQueueIndex = "LCGIMIJBKLB";           // MapQueueGame static int: position in the playlist
     public const string ResultUpload = "JGIIFGNLPEL";            // MapApi.SendRaceResult(game, RaceResultCallback): POST /RaceResult (season points)

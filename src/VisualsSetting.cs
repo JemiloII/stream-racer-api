@@ -47,11 +47,22 @@ public static class VisualsSetting
         }
         title.GetComponent<TMP_Text>().text = "TWITCH PICTURES";
         _switch = row.GetComponentInChildren<SwitchManager>();
-        _switch.onEvent = new UnityEngine.Events.UnityEvent();
-        _switch.offEvent = new UnityEngine.Events.UnityEvent();
-        _switch.onEvent.AddListener(() => Save(true));
-        _switch.offEvent.AddListener(() => Save(false));
+        _switch.onEvent = new UnityEngine.Events.UnityEvent();   // no events: the game's settings code may poke
+        _switch.offEvent = new UnityEngine.Events.UnityEvent();  // switches, and that must never save our setting
         _switch.isOn = Settings.Current.twitchPictures;
+        // every button in the copy (the row and the switch's own on/off parts) still pointed at V-SYNC; only a
+        // click on ours flips and saves it
+        foreach (var button in row.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+        {
+            button.onClick = new UnityEngine.UI.Button.ButtonClickedEvent();
+            button.onClick.AddListener(Toggle);
+        }
+    }
+
+    static void Toggle()
+    {
+        _switch.AnimateSwitch();
+        Save(_switch.isOn);
     }
 
     static void Save(bool on)

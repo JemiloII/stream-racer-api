@@ -101,7 +101,8 @@ static partial class Game
         if (profile == null || target == null) return;
         string login = profile.Login() ?? "";
         bool noTwitchPicture = Avatars.TryGetValue(login, out var known) && known == null;
-        if (Images.TryGetValue(login, out var source)) RowImages[target] = source;
+        var source = ImageSource(login);   // a live join's picture, else the bot's / auto-join entry's saved one
+        if (source != null) RowImages[target] = source;
         else if (Settings.Current.twitchPictures && login != "" && !noTwitchPicture && !string.IsNullOrEmpty(TwitchToken)) RowImages[target] = TwitchPicture + login;
         else RowImages.Remove(target);
     }
