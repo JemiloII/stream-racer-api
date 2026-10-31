@@ -15,6 +15,7 @@ public static class MenuButton
     static float _placeAt;
     static float _nextFit;
     const string ProfilePath = "Canvas/Main Panels/Bottom/Profile";
+    const float ProfileMaxWidth = 600f;  // the game's own width for it
     const float ProfileChrome = 115f;   // the profile pill around its name: picture + paddings (600 wide, 485 of it name)
     static float _next;
 
@@ -99,7 +100,7 @@ public static class MenuButton
         {
             return;
         }
-        float width = Mathf.Ceil(ProfileChrome + name.preferredWidth + 10f);
+        float width = Mathf.Min(ProfileMaxWidth, Mathf.Ceil(ProfileChrome + name.preferredWidth + 10f));   // any name, never wider than the game made it
         if (Mathf.Abs(profile.rect.width - width) < 1f)
         {
             return;
